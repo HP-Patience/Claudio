@@ -651,6 +651,9 @@ async function loadFavorites() {
 let pendingSuggestions = [];
 
 function showToast(s) {
+  // Don't show duplicate toasts for same suggestion
+  if (pendingSuggestions.some(p => p.id === s.id)) return;
+
   pendingSuggestions.push(s);
   updateBellBadge();
 
@@ -662,10 +665,14 @@ function showToast(s) {
       <button class="toast-btn dismiss">忽略</button>
     </div>`;
 
-  toast.querySelector('.play').addEventListener('click', async () => {
-    toast.remove();
+  const removeSuggestion = () => {
+    if (toast.parentNode) toast.remove();
     pendingSuggestions = pendingSuggestions.filter(p => p.id !== s.id);
     updateBellBadge();
+  };
+
+  toast.querySelector('.play').addEventListener('click', async () => {
+    removeSuggestion();
     const hints = {
       birthday: '来点庆祝的歌', rainy_evening: '来点爵士', late_night: '来点轻柔助眠的',
       morning_commute: '来点提神的', friday_night: '来点放松的', weekend_chill: '来点轻松的',
@@ -674,14 +681,10 @@ function showToast(s) {
     sendChat(dom.chatInput.value);
   });
 
-  toast.querySelector('.dismiss').addEventListener('click', () => {
-    toast.remove();
-    pendingSuggestions = pendingSuggestions.filter(p => p.id !== s.id);
-    updateBellBadge();
-  });
+  toast.querySelector('.dismiss').addEventListener('click', removeSuggestion);
 
   dom.toastContainer.appendChild(toast);
-  setTimeout(() => { if (toast.parentNode) toast.remove(); }, 30000);
+  setTimeout(removeSuggestion, 30000);
 }
 
 function updateBellBadge() {

@@ -68,6 +68,18 @@ export function checkTriggers(ctx: TriggerContext): void {
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
+let _lat: number | null = null;
+let _lon: number | null = null;
+
+export function cacheCoords(lat: number, lon: number): void {
+  _lat = lat;
+  _lon = lon;
+}
+
+export function getCachedCoords(): { lat: number; lon: number } | null {
+  return _lat != null && _lon != null ? { lat: _lat, lon: _lon } : null;
+}
+
 export function startTriggerLoop(getContext: () => Promise<TriggerContext>): void {
   if (timer) return;
   timer = setInterval(async () => {

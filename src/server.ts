@@ -10,7 +10,7 @@ import { setWeatherKey } from './adapters/weather.js';
 import { setFeishuConfig } from './adapters/feishu.js';
 import { setUpnpDevices } from './adapters/upnp.js';
 import { setFishKey } from './tts.js';
-import { startTriggerLoop } from './triggers.js';
+import { startTriggerLoop, getCachedCoords } from './triggers.js';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -62,7 +62,8 @@ export async function start(options: StartOptions = {}) {
   // start scene trigger loop (check every 5 min)
   startTriggerLoop(async () => {
     try {
-      const ctx = await executor.getContext();
+      const coords = getCachedCoords();
+      const ctx = await executor.getContext(coords ?? undefined);
       const now = new Date();
       return { hour: now.getHours(), day: now.getDay(), weather: ctx.weather, calendar: ctx.calendar };
     } catch {

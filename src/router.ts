@@ -8,6 +8,7 @@ import { getSuggestedQueue } from './predictor.js';
 import type { createExecutor } from './executor.js';
 import { broadcast } from './ws.js';
 import { handleSkip } from './feedback.js';
+import { cacheCoords } from './triggers.js';
 import { getSongUrl, getSongDetail } from './adapters/netease.js';
 import { getCurrentWeatherByCoords } from './adapters/weather.js';
 import fs from 'node:fs';
@@ -117,6 +118,9 @@ export function createApp(opts: RouterOptions = {}): Express {
     if (opts.executor) {
       try {
         const { lat, lon } = req.body;
+        if (lat != null && lon != null) {
+          cacheCoords(Number(lat), Number(lon));
+        }
         const ctx = await opts.executor.getContext(
           (lat != null && lon != null) ? { lat: Number(lat), lon: Number(lon) } : undefined
         );
@@ -394,6 +398,7 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
     const lat = Number(req.query.lat);
     const lon = Number(req.query.lon);
     if (isNaN(lat) || isNaN(lon)) return res.status(400).json({ error: 'lat and lon required' });
+    cacheCoords(lat, lon);
     try {
       const data = await getCurrentWeatherByCoords(lat, lon);
       res.json(data);
