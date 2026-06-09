@@ -1,4 +1,4 @@
-# IDEs
+# IDE
 .vscode/
 .idea/
 *.swp
@@ -23,4 +23,16 @@ node_modules/
 # Environment
 .env
 .env.local
+
+# Runtime
+state.db
+Archive/
+
+# Auto-generated indexes
+.codegraph/
+
+# MCP config (local paths)
+.claude/
+
+# External
 api-enhanced/
