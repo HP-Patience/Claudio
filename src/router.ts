@@ -141,7 +141,8 @@ export function createApp(opts: RouterOptions = {}): Express {
       '心情不好': 'low', '难过': 'low', '伤心': 'low', '郁闷': 'low', '低落': 'low',
       '累了': 'tired', '困': 'tired', '疲惫': 'tired',
       '焦虑': 'anxious', '紧张': 'anxious', '烦': 'anxious',
-      '开心': 'happy', '高兴': 'happy', '兴奋': 'excited',
+      '开心': 'happy', '高兴': 'happy', '愉快': 'happy', '快乐': 'happy',
+      '兴奋': 'excited', '激动': 'excited', '期待': 'excited',
     };
     let moodDetected = '';
     for (const [kw, mood] of Object.entries(moodKeywords)) {
