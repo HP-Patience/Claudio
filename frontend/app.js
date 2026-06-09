@@ -524,6 +524,9 @@ async function sendChat(text) {
       if (data.segue) {
         addChatMessage(`*${data.segue}*`, 'system');
       }
+      if (data.mood) {
+        state._currentScene = data.mood.detected || 'chat';
+      }
     }
   } catch (err) {
     addChatMessage(`Error: ${err.message}`, 'system');
