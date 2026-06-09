@@ -1,10 +1,11 @@
 import express from 'express';
 import type { Express, Request, Response } from 'express';
 import type Database from 'better-sqlite3';
-import { getRecentPlays, getPlan, addMessage, getMessages, getPref, setPref, addFavorite, removeFavorite, isFavorite, getFavorites, addHiddenSong } from './db.js';
+import { getRecentPlays, getPlan, addMessage, getMessages, getPref, setPref, addFavorite, removeFavorite, isFavorite, getFavorites, addHiddenSong, getPlayStats, getPlayStatsAll } from './db.js';
 import { invokeClaude } from './claude.js';
 import { assemblePrompt } from './context.js';
 import { getSuggestedQueue } from './predictor.js';
+import { generateReport } from './analytics.js';
 import type { createExecutor } from './executor.js';
 import { broadcast } from './ws.js';
 import { handleSkip } from './feedback.js';
@@ -470,6 +471,33 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
 
       const item = { songId: String(detail.id), name: detail.name, artist: detail.artist, url };
       res.json(item);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown';
+      res.status(502).json({ error: msg });
+    }
+  });
+
+  // ── Stats ──
+
+  app.get('/api/stats', (req: Request, res: Response) => {
+    if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
+    const period = (req.query.period as string) || new Date().toISOString().slice(0, 7);
+    const stats = getPlayStats(opts.db, period);
+    if (!stats) return res.json({ period, stat: null, insight: null });
+    res.json(stats);
+  });
+
+  app.get('/api/stats/list', (_req: Request, res: Response) => {
+    if (!opts.db) return res.json({ periods: [] });
+    res.json({ periods: getPlayStatsAll(opts.db) });
+  });
+
+  app.post('/api/stats/generate', async (req: Request, res: Response) => {
+    if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
+    try {
+      const period = req.body.period || new Date().toISOString().slice(0, 7);
+      const report = await generateReport(opts.db, period);
+      res.json(report);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown';
       res.status(502).json({ error: msg });

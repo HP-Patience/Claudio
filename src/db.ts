@@ -52,6 +52,14 @@ export function initDb(db: Database.Database): void {
       session_id TEXT NOT NULL DEFAULT '',
       skipped_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS play_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      period TEXT NOT NULL UNIQUE,
+      stat_json TEXT NOT NULL DEFAULT '{}',
+      insight_md TEXT NOT NULL DEFAULT '',
+      generated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 }
 
@@ -179,4 +187,25 @@ export function getRecentSkips(db: Database.Database, sessionId: string, limit: 
   return db.prepare(
     'SELECT song_id, song_name, artist, scene, session_id, skipped_at FROM skips WHERE session_id = ? ORDER BY id DESC LIMIT ?'
   ).all(sessionId, limit) as { song_id: string; song_name: string; artist: string; scene: string; session_id: string; skipped_at: string }[];
+}
+
+// ── Play Stats ──
+
+export function setPlayStats(db: Database.Database, period: string, statJson: string, insightMd: string): void {
+  db.prepare(
+    'INSERT INTO play_stats (period, stat_json, insight_md) VALUES (?, ?, ?) ON CONFLICT(period) DO UPDATE SET stat_json = excluded.stat_json, insight_md = excluded.insight_md, generated_at = datetime(\'now\')'
+  ).run(period, statJson, insightMd);
+}
+
+export function getPlayStats(db: Database.Database, period: string) {
+  const row = db.prepare(
+    'SELECT period, stat_json, insight_md, generated_at FROM play_stats WHERE period = ?'
+  ).get(period) as { period: string; stat_json: string; insight_md: string; generated_at: string } | undefined;
+  return row ? { period: row.period, stat: JSON.parse(row.stat_json), insight: row.insight_md, generatedAt: row.generated_at } : null;
+}
+
+export function getPlayStatsAll(db: Database.Database) {
+  return db.prepare(
+    'SELECT period, generated_at FROM play_stats ORDER BY period DESC LIMIT 12'
+  ).all() as { period: string; generated_at: string }[];
 }
