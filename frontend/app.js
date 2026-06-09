@@ -60,6 +60,9 @@ const dom = {
   favsPanel: $('#favs-panel'),
   chatPanel: $('#chat-panel'),
   arcIndicator: $('#arc-indicator'),
+  bellBtn: $('#bell-btn'),
+  bellBadge: $('#bell-badge'),
+  toastContainer: $('#toast-container'),
 };
 
 // ── audio ──
@@ -589,6 +592,15 @@ function connectWs() {
             addChatMessage(msg.payload.say, 'ai');
           }
           break;
+        case 'suggestion':
+          {
+            const s = msg.payload;
+            if (!s) break;
+            const suggestionsOff = localStorage.getItem('claudio-suggestions') === 'off';
+            if (suggestionsOff) break;
+            showToast(s);
+          }
+          break;
       }
     } catch { /* ignore parse errors */ }
   };
@@ -635,6 +647,60 @@ async function loadFavorites() {
     dom.favsCount.textContent = String(data.favorites?.length || 0);
   } catch { /* ignore */ }
 }
+
+let pendingSuggestions = [];
+
+function showToast(s) {
+  pendingSuggestions.push(s);
+  updateBellBadge();
+
+  const toast = document.createElement('div');
+  toast.className = 'toast-card';
+  toast.innerHTML = `<span class="toast-text">${s.text}</span>
+    <div class="toast-actions">
+      <button class="toast-btn play" data-scene="${s.scene}">播放</button>
+      <button class="toast-btn dismiss">忽略</button>
+    </div>`;
+
+  toast.querySelector('.play').addEventListener('click', async () => {
+    toast.remove();
+    pendingSuggestions = pendingSuggestions.filter(p => p.id !== s.id);
+    updateBellBadge();
+    const hints = {
+      birthday: '来点庆祝的歌', rainy_evening: '来点爵士', late_night: '来点轻柔助眠的',
+      morning_commute: '来点提神的', friday_night: '来点放松的', weekend_chill: '来点轻松的',
+    };
+    dom.chatInput.value = hints[s.scene] || '来点音乐';
+    sendChat(dom.chatInput.value);
+  });
+
+  toast.querySelector('.dismiss').addEventListener('click', () => {
+    toast.remove();
+    pendingSuggestions = pendingSuggestions.filter(p => p.id !== s.id);
+    updateBellBadge();
+  });
+
+  dom.toastContainer.appendChild(toast);
+  setTimeout(() => { if (toast.parentNode) toast.remove(); }, 30000);
+}
+
+function updateBellBadge() {
+  const count = pendingSuggestions.length;
+  if (count > 0) {
+    dom.bellBtn.style.display = '';
+    dom.bellBadge.style.display = '';
+    dom.bellBadge.textContent = String(count);
+  } else {
+    dom.bellBtn.style.display = 'none';
+    dom.bellBadge.style.display = 'none';
+  }
+}
+
+// Bell click re-shows latest suggestion
+dom.bellBtn?.addEventListener('click', () => {
+  const latest = pendingSuggestions[pendingSuggestions.length - 1];
+  if (latest) showToast(latest);
+});
 
 async function init() {
   await loadFavorites();

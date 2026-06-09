@@ -10,6 +10,7 @@ import { setWeatherKey } from './adapters/weather.js';
 import { setFeishuConfig } from './adapters/feishu.js';
 import { setUpnpDevices } from './adapters/upnp.js';
 import { setFishKey } from './tts.js';
+import { startTriggerLoop } from './triggers.js';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -57,6 +58,17 @@ export async function start(options: StartOptions = {}) {
 
   // attach WebSocket
   createWss(server);
+
+  // start scene trigger loop (check every 5 min)
+  startTriggerLoop(async () => {
+    try {
+      const ctx = await executor.getContext();
+      const now = new Date();
+      return { hour: now.getHours(), day: now.getDay(), weather: ctx.weather, calendar: ctx.calendar };
+    } catch {
+      return { hour: 0, day: 0, weather: '', calendar: '' };
+    }
+  });
 
   return new Promise<{ server: http.Server; shutdown: () => Promise<void> }>((resolve) => {
     server.listen(port, () => {

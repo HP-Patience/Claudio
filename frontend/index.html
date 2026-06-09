@@ -20,6 +20,10 @@
         <span class="nav-title">Claudio</span>
       </div>
       <div class="nav-actions">
+        <button class="nav-btn bell-btn" id="bell-btn" title="场景建议" style="display:none">
+          <span id="bell-badge" class="bell-badge" style="display:none">0</span>
+          🔔
+        </button>
         <button class="nav-btn" id="theme-toggle">LIGHT</button>
       <button class="nav-btn" id="settings-toggle" title="设置">⚙</button>
       </div>
@@ -107,6 +111,8 @@
         <span id="connection-status" class="disconnected">DISCONNECTED</span>
       </div>
     </footer>
+
+    <div class="toast-container" id="toast-container"></div>
   </div>
 
   <!-- Settings Modal -->
