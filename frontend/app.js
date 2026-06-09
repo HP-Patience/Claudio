@@ -773,7 +773,7 @@ async function renderStatsPanel() {
 
 function renderReportContent(data) {
   // Clear existing report content but keep period selector
-  const existing = dom.statsPanel.querySelectorAll('.stats-report, .stats-gen-btn');
+  const existing = dom.statsPanel.querySelectorAll('.stats-report');
   existing.forEach(el => el.remove());
 
   const card = document.createElement('div');

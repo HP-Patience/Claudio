@@ -15,7 +15,7 @@ function aggregatePlays(db: Database.Database, period: string): PlayAggregation 
   const allRows = db.prepare(
     "SELECT song_id, song_name, artist, played_at FROM plays WHERE played_at >= ? AND played_at < ?"
   ).all(
-    `${period}-01`,
+    `${year}-${String(month).padStart(2, '0')}-01`,
     month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, '0')}-01`
   ) as { song_id: string; song_name: string; artist: string; played_at: string }[];
 
@@ -63,6 +63,12 @@ export async function generateReport(db: Database.Database, period?: string): Pr
 }> {
   const p = period || new Date().toISOString().slice(0, 7);
   const stat = aggregatePlays(db, p);
+
+  if (stat.totalPlays === 0) {
+    const fallback = `${p} 月度听歌报告\n\n本月暂无播放数据，多听点歌再来吧！`;
+    setPlayStats(db, p, JSON.stringify(stat), fallback);
+    return { period: p, stat, insight: fallback };
+  }
 
   const prompt = `你是一名音乐数据分析师。根据以下统计生成月度听歌报告：
 
