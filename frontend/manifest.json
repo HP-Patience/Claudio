@@ -1,0 +1,10 @@
+{
+  "name": "Claudio FM",
+  "short_name": "Claudio",
+  "description": "Personal AI radio DJ — intelligent music curation with voice broadcast",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#121217",
+  "icons": []
+}

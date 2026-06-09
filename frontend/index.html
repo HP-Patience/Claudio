@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claudio FM</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Unbounded:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23d4a373'/><text x='50' y='62' text-anchor='middle' font-size='36' fill='%23181310'>♪</text></svg>" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Nav -->
+    <nav class="nav">
+      <div class="nav-left">
+        <div class="nav-avatar">♪</div>
+        <span class="nav-title">Claudio</span>
+      </div>
+      <div class="nav-actions">
+        <button class="nav-btn" id="theme-toggle">LIGHT</button>
+      </div>
+    </nav>
+
+    <!-- Clock -->
+    <section class="clock-section">
+      <div class="clock-display" id="clock">00:00</div>
+      <div class="clock-date">
+        <span class="clock-weekday" id="weekday">MON</span>
+        <span class="clock-date-str" id="date-str">01 JAN 2026</span>
+      </div>
+      <div class="on-air" id="on-air">
+        <span class="on-air-dot"></span>
+        ON AIR
+      </div>
+    </section>
+
+    <!-- Player -->
+    <section class="player">
+      <div class="player-top">
+        <div class="player-info">
+          <div class="track-title">
+            <div class="waveform paused" id="waveform">
+              <span></span><span></span><span></span><span></span>
+            </div>
+            <div class="player-track" id="now-playing">Claudio</div>
+          </div>
+          <div class="player-status">READY</div>
+        </div>
+        <div class="player-controls">
+          <button class="ctrl-btn" id="prev-btn" title="上一首">⏮</button>
+          <button class="ctrl-btn" id="play-btn" title="播放/暂停">▶</button>
+          <button class="ctrl-btn" id="next-btn" title="下一首">⏭</button>
+          <button class="ctrl-btn" id="love-btn" title="收藏">♡</button>
+          <button class="ctrl-btn text" id="hide-btn" title="隐藏">HIDE</button>
+          <input type="range" id="volume" min="0" max="100" value="80" title="音量" />
+        </div>
+      </div>
+      <div class="player-bottom">
+        <div class="progress-container">
+          <div id="progress-bar" style="width:0%"></div>
+        </div>
+        <div class="time-labels">
+          <span id="current-time">0:00</span>
+          <span id="duration">0:00</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chat -->
+    <section class="chat-section">
+      <div class="chat-header">
+        <span>Queue</span>
+        <span id="queue-count">0 tracks</span>
+      </div>
+      <div class="chat-messages" id="chat-messages"></div>
+    </section>
+
+    <!-- Input -->
+    <section class="input-section">
+      <div class="input-row">
+        <input type="text" id="chat-input" placeholder="Say something to the DJ …" autocomplete="off" />
+        <button class="send-btn" id="send-btn">↑</button>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span>Claudio FM</span>
+      <span id="connection-status" class="disconnected">DISCONNECTED</span>
+    </footer>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
