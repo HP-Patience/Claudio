@@ -30,6 +30,7 @@ const dom = {
   chatInput: $('#chat-input'),
   sendBtn: $('#send-btn'),
   connectionStatus: $('#connection-status'),
+  ncmStatus: $('#ncm-status'),
   queueCount: $('#queue-count'),
   themeToggle: $('#theme-toggle'),
   settingsToggle: $('#settings-toggle'),
@@ -283,6 +284,22 @@ function connectWs() {
 }
 
 connectWs();
+
+// ── NCM API status polling ──
+async function checkNcmStatus() {
+  dom.ncmStatus.className = 'ncm-status checking';
+  try {
+    const res = await fetch('/api/status/ncm');
+    const data = await res.json();
+    dom.ncmStatus.className = `ncm-status ${data.online ? 'online' : 'offline'}`;
+    dom.ncmStatus.title = data.online ? '网易云 API 在线' : `网易云 API 离线: ${data.reason || 'unknown'}`;
+  } catch {
+    dom.ncmStatus.className = 'ncm-status offline';
+    dom.ncmStatus.title = '网易云 API 状态检查失败';
+  }
+}
+checkNcmStatus();
+setInterval(checkNcmStatus, 30000);
 
 // ── welcome message ──
 addChatMessage('你好！我是 Claudio，你的私人 AI 电台 DJ。想听什么？', 'ai');

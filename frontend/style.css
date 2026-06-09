@@ -274,11 +274,47 @@ body {
 .footer {
   padding: 10px 24px;
   display: flex; justify-content: space-between;
+  align-items: center;
   font-size: 9px; color: var(--text-muted);
   font-family: var(--font-mono); letter-spacing: .05em;
 }
+.footer-right { display: flex; align-items: center; gap: 12px; }
 #connection-status.connected { color: var(--accent); }
 #connection-status.disconnected { color: #e76f51; }
+
+/* ── NCM status breathing light ── */
+.ncm-status {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 9px; font-family: var(--font-mono);
+  letter-spacing: 0.08em; cursor: default;
+}
+.ncm-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-muted);
+  transition: background 0.3s;
+}
+.ncm-status.online .ncm-dot {
+  background: #7cb67d;
+  animation: breathe 2s ease-in-out infinite;
+}
+.ncm-status.offline .ncm-dot {
+  background: #e76f51;
+}
+.ncm-status.checking .ncm-dot {
+  background: #d4a373;
+  animation: breathe 0.6s ease-in-out infinite;
+}
+.ncm-label {
+  color: var(--text-muted);
+  transition: color 0.3s;
+}
+.ncm-status.online .ncm-label { color: #7cb67d; }
+.ncm-status.offline .ncm-label { color: #e76f51; }
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.3; box-shadow: 0 0 0 0 currentColor; }
+  50% { opacity: 1; box-shadow: 0 0 6px 2px currentColor; }
+}
 
 /* ── Modal ── */
 .modal-overlay {

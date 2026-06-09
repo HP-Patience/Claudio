@@ -224,5 +224,23 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
     }
   });
 
+  app.get('/api/status/ncm', async (_req: Request, res: Response) => {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 3000);
+      const r = await fetch(`${NCM_API_BASE}/search?keywords=test&limit=1`, {
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (r.ok) {
+        res.json({ online: true });
+      } else {
+        res.json({ online: false, reason: `HTTP ${r.status}` });
+      }
+    } catch {
+      res.json({ online: false, reason: 'unreachable' });
+    }
+  });
+
   return app;
 }
