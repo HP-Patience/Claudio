@@ -9,6 +9,8 @@ export interface ClaudeOutput {
   segue: string;
   error?: boolean;
   raw?: string;
+  mood?: { detected: string; target: string };
+  arc?: { start: string; end: string; steps: number };
 }
 
 export interface ClaudeUsage {
@@ -28,6 +30,8 @@ export function parseOutput(raw: string): ClaudeOutput {
         play: parsed.play ?? [],
         reason: parsed.reason ?? '',
         segue: parsed.segue ?? '',
+        mood: parsed.mood,
+        arc: parsed.arc,
       };
     } catch {
       // invalid JSON inside braces, fall through

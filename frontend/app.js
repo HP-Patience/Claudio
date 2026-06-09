@@ -57,6 +57,7 @@ const dom = {
   queuePanel: $('#queue-panel'),
   favsPanel: $('#favs-panel'),
   chatPanel: $('#chat-panel'),
+  arcIndicator: $('#arc-indicator'),
 };
 
 // ── audio ──
@@ -409,6 +410,18 @@ function playTrack(item) {
     dom.loveBtn.textContent = '♡';
     dom.loveBtn.classList.remove('loved');
   }
+
+  // update arc indicator
+  if (dom.arcIndicator) {
+    const trackIdx = state.queue.findIndex(t => t.songId === item.songId);
+    const totalSteps = state._arcSteps || 0;
+    if (totalSteps > 1 && trackIdx >= 0) {
+      dom.arcIndicator.textContent = `情绪过渡 ${trackIdx + 1}/${Math.min(totalSteps, state.queue.length)}`;
+      dom.arcIndicator.style.display = '';
+    } else {
+      dom.arcIndicator.style.display = 'none';
+    }
+  }
 }
 
 // ── progress bar drag/click ──
@@ -541,6 +554,9 @@ function connectWs() {
           if (msg.payload?.tracks) {
             setQueue(msg.payload.tracks);
             playTrack(msg.payload.tracks[0]);
+            if (msg.payload.arc) {
+              state._arcSteps = msg.payload.arc.steps;
+            }
           }
           break;
         case 'say':

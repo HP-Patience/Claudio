@@ -136,9 +136,25 @@ export function createApp(opts: RouterOptions = {}): Express {
     });
     const djPersona = loadDJPrompt();
 
+    // Mood detection
+    const moodKeywords: Record<string, string> = {
+      '心情不好': 'low', '难过': 'low', '伤心': 'low', '郁闷': 'low', '低落': 'low',
+      '累了': 'tired', '困': 'tired', '疲惫': 'tired',
+      '焦虑': 'anxious', '紧张': 'anxious', '烦': 'anxious',
+      '开心': 'happy', '高兴': 'happy', '兴奋': 'excited',
+    };
+    let moodDetected = '';
+    for (const [kw, mood] of Object.entries(moodKeywords)) {
+      if (text.includes(kw)) { moodDetected = mood; break; }
+    }
+    const moodGuidance = moodDetected
+      ? `\n=== Mood Guidance ===\nUser mood seems: ${moodDetected}\nStrategy: validate first (1 slow/mid song), then gradually warm up. Never jump to extreme opposite.\nOutput "mood" and "arc" fields in your JSON.`
+      : '';
+
     const fullPrompt = `${djPersona}
 
 ${basePrompt}
+${moodGuidance}
 
 === User Message ===
 ${text}
@@ -150,7 +166,9 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
   "say": "DJ播报文案（中文，简短自然，1-2句话）",
   "play": [],
   "reason": "选歌原因",
-  "segue": "歌曲转场词（没有则填空字符串）"
+  "segue": "歌曲转场词（没有则填空字符串）",
+  "mood": { "detected": "识别的情绪", "target": "目标情绪" },
+  "arc": { "start": "slow|mid|high", "end": "slow|mid|high", "steps": 3 }
 }`;
 
     const result = await invokeClaude(fullPrompt, { db: opts.db });
@@ -178,7 +196,7 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
             }
           }
           // Broadcast play event to all WebSocket clients
-          broadcast('play', { tracks: playedItems });
+          broadcast('play', { tracks: playedItems, arc: result.arc });
         } catch {
           // netease API offline — skip play
         }
