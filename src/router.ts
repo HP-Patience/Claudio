@@ -1,13 +1,16 @@
 import express from 'express';
 import type { Express, Request, Response } from 'express';
 import type Database from 'better-sqlite3';
-import { getRecentPlays, getPlan, addMessage, getMessages } from './db.js';
+import { getRecentPlays, getPlan, addMessage, getMessages, getPref, setPref } from './db.js';
 import { invokeClaude } from './claude.js';
 import { assemblePrompt } from './context.js';
 import type { createExecutor } from './executor.js';
 import { broadcast } from './ws.js';
 import fs from 'node:fs';
 import path from 'node:path';
+import https from 'node:https';
+
+const NCM_API_BASE = process.env.NCM_API ?? 'http://localhost:3001';
 
 const SIMPLE_COMMANDS = new Set([
   '下一首', '暂停', '继续', '上一首', '音量加', '音量减',
@@ -89,22 +92,26 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
   "segue": "歌曲转场词（没有则填空字符串）"
 }`;
 
-    const result = await invokeClaude(fullPrompt);
+    const result = await invokeClaude(fullPrompt, { db: opts.db });
 
     // Execute play actions if executor is available
     let playedItems;
     if (opts.executor && result.play && result.play.length > 0) {
       const queries = result.play.filter((p: any) => typeof p === 'string');
       if (queries.length > 0) {
-        playedItems = await opts.executor.executePlay(queries);
-        // Log player state
-        if (opts.db && playedItems.length > 0) {
-          for (const item of playedItems) {
-            addMessage(opts.db, { role: 'assistant', content: `Playing: ${item.name} by ${item.artist}` });
+        try {
+          playedItems = await opts.executor.executePlay(queries);
+          // Log player state
+          if (opts.db && playedItems.length > 0) {
+            for (const item of playedItems) {
+              addMessage(opts.db, { role: 'assistant', content: `Playing: ${item.name} by ${item.artist}` });
+            }
           }
+          // Broadcast play event to all WebSocket clients
+          broadcast('play', { tracks: playedItems });
+        } catch {
+          // netease API offline — skip play
         }
-        // Broadcast play event to all WebSocket clients
-        broadcast('play', { tracks: playedItems });
       }
     }
 
@@ -117,6 +124,7 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
     res.json({ ...result, claude: true, played: playedItems ?? [] });
     } catch (err) {
       const msg = err instanceof Error ? err.message : '未知错误';
+      console.error('[chat error]', err);
       res.status(500).json({
         say: `抱歉，出错了: ${msg}`,
         play: [],
@@ -138,6 +146,82 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
       ? getPlan(opts.db, new Date().toISOString().slice(0, 10))
       : null;
     res.json(plan ?? { songs: [], theme: '' });
+  });
+
+  // ── API 配置 ──
+  app.get('/api/config', (req: Request, res: Response) => {
+    if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
+    const apiKey = getPref(opts.db, 'api_key') || '';
+    const baseUrl = getPref(opts.db, 'api_base_url') || '';
+    res.json({ apiKey, baseUrl });
+  });
+
+  app.post('/api/config', (req: Request, res: Response) => {
+    if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
+    const { apiKey, baseUrl } = req.body;
+    if (apiKey !== undefined && !apiKey.includes('*')) {
+      setPref(opts.db, 'api_key', apiKey);
+    }
+    if (baseUrl !== undefined) {
+      setPref(opts.db, 'api_base_url', baseUrl);
+    }
+    res.json({ ok: true });
+  });
+
+  app.post('/api/config/test', async (req: Request, res: Response) => {
+    if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
+    const apiKey = req.body.apiKey || getPref(opts.db, 'api_key') || '';
+    const baseUrl = req.body.baseUrl || getPref(opts.db, 'api_base_url') || '';
+    if (!apiKey) return res.status(400).json({ ok: false, message: 'API Key 不能为空' });
+    if (!baseUrl) return res.status(400).json({ ok: false, message: 'Base URL 不能为空' });
+
+    const cleanBase = baseUrl.replace(/\/+$/, '');
+    const isAnthropic = cleanBase.includes('anthropic.com');
+
+    try {
+      if (isAnthropic) {
+        const response = await fetch(`${cleanBase}/v1/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] }),
+        });
+        if (!response.ok) {
+          const text = await response.text().catch(() => 'unknown error');
+          return res.status(502).json({ ok: false, message: `API 错误 (${response.status}): ${text.slice(0, 200)}` });
+        }
+        res.json({ ok: true, message: '主人，我在' });
+      } else {
+        // OpenAI-compatible (DeepSeek, etc.)
+        const body = JSON.stringify({ model: 'deepseek-chat', max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] });
+        const u = new URL(`${cleanBase}/v1/chat/completions`);
+        const result = await new Promise<{ ok: boolean; message: string }>((resolve) => {
+          const req = https.request({
+            hostname: u.hostname, port: 443, path: u.pathname, method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'Content-Length': Buffer.byteLength(body) },
+            timeout: 10000,
+          }, (r) => {
+            let data = '';
+            r.on('data', (chunk) => data += chunk);
+            r.on('end', () => {
+              if (r.statusCode && r.statusCode >= 200 && r.statusCode < 300) {
+                resolve({ ok: true, message: '主人，我在' });
+              } else {
+                resolve({ ok: false, message: `API 错误 (${r.statusCode}): ${data.slice(0, 200)}` });
+              }
+            });
+          });
+          req.on('error', (e) => resolve({ ok: false, message: `连接失败: ${e.message}` }));
+          req.on('timeout', () => { req.destroy(); resolve({ ok: false, message: '连接超时' }); });
+          req.write(body);
+          req.end();
+        });
+        if (result.ok) return res.json(result);
+        return res.status(502).json(result);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(502).json({ ok: false, message: `连接失败: ${msg}` });
+    }
   });
 
   return app;

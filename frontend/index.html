@@ -21,6 +21,7 @@
       </div>
       <div class="nav-actions">
         <button class="nav-btn" id="theme-toggle">LIGHT</button>
+      <button class="nav-btn" id="settings-toggle" title="设置">⚙</button>
       </div>
     </nav>
 
@@ -91,6 +92,34 @@
       <span>Claudio FM</span>
       <span id="connection-status" class="disconnected">DISCONNECTED</span>
     </footer>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay" id="settings-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">Settings</span>
+        <button class="modal-close" id="settings-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="settings-api-key">API Key</label>
+          <div class="input-with-eye">
+            <input type="password" id="settings-api-key" class="form-input" placeholder="sk-ant-..." autocomplete="off" />
+            <button class="eye-btn" id="settings-key-eye" title="显示/隐藏">👁</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="settings-base-url">Base URL</label>
+          <input type="url" id="settings-base-url" class="form-input" placeholder="https://api.anthropic.com" autocomplete="off" />
+        </div>
+        <div class="form-status" id="settings-status"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn secondary" id="settings-test">Test Connection</button>
+        <button class="modal-btn primary" id="settings-save">Save</button>
+      </div>
+    </div>
   </div>
 
   <script src="/app.js"></script>

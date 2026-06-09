@@ -32,6 +32,15 @@ const dom = {
   connectionStatus: $('#connection-status'),
   queueCount: $('#queue-count'),
   themeToggle: $('#theme-toggle'),
+  settingsToggle: $('#settings-toggle'),
+  settingsModal: $('#settings-modal'),
+  settingsClose: $('#settings-close'),
+  settingsApiKey: $('#settings-api-key'),
+  settingsBaseUrl: $('#settings-base-url'),
+  settingsStatus: $('#settings-status'),
+  settingsTest: $('#settings-test'),
+  settingsSave: $('#settings-save'),
+  settingsKeyEye: $('#settings-key-eye'),
 };
 
 // ── audio ──
@@ -169,7 +178,10 @@ dom.volumeSlider.addEventListener('input', () => {
 });
 
 // ── chat ──
+let lastAiText = '';
 function addChatMessage(text, type = 'ai') {
+  if (type === 'ai' && text === lastAiText) return;
+  if (type === 'ai') lastAiText = text;
   const bubble = document.createElement('div');
   bubble.className = `chat-bubble ${type}`;
 
@@ -274,3 +286,105 @@ connectWs();
 
 // ── welcome message ──
 addChatMessage('你好！我是 Claudio，你的私人 AI 电台 DJ。想听什么？', 'ai');
+
+// ── Settings ──
+dom.settingsToggle.addEventListener('click', () => {
+  loadConfig();
+  dom.settingsModal.classList.add('open');
+});
+
+function closeSettings() {
+  dom.settingsModal.classList.remove('open');
+  dom.settingsStatus.textContent = '';
+  dom.settingsStatus.className = 'form-status';
+}
+dom.settingsClose.addEventListener('click', closeSettings);
+dom.settingsModal.addEventListener('click', (e) => {
+  if (e.target === dom.settingsModal) closeSettings();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && dom.settingsModal.classList.contains('open')) closeSettings();
+});
+
+async function loadConfig() {
+  try {
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    dom.settingsApiKey.value = data.apiKey || '';
+    dom.settingsBaseUrl.value = data.baseUrl || 'https://api.anthropic.com';
+  } catch (err) {
+    dom.settingsStatus.textContent = `加载失败: ${err.message}`;
+    dom.settingsStatus.className = 'form-status error';
+  }
+}
+
+// Eye toggle for API key
+dom.settingsKeyEye.addEventListener('click', () => {
+  const input = dom.settingsApiKey;
+  if (input.type === 'password') {
+    input.type = 'text';
+    dom.settingsKeyEye.textContent = '👁‍🗨';
+  } else {
+    input.type = 'password';
+    dom.settingsKeyEye.textContent = '👁';
+  }
+});
+
+dom.settingsTest.addEventListener('click', async () => {
+  dom.settingsStatus.textContent = '测试中…';
+  dom.settingsStatus.className = 'form-status';
+  dom.settingsTest.disabled = true;
+  try {
+    const res = await fetch('/api/config/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey: dom.settingsApiKey.value,
+        baseUrl: dom.settingsBaseUrl.value,
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      dom.settingsStatus.textContent = `✓ ${data.message}`;
+      dom.settingsStatus.className = 'form-status success';
+    } else {
+      dom.settingsStatus.textContent = `✗ ${data.message}`;
+      dom.settingsStatus.className = 'form-status error';
+    }
+  } catch (err) {
+    dom.settingsStatus.textContent = `✗ 错误: ${err.message}`;
+    dom.settingsStatus.className = 'form-status error';
+  } finally {
+    dom.settingsTest.disabled = false;
+  }
+});
+
+dom.settingsSave.addEventListener('click', async () => {
+  dom.settingsStatus.textContent = '保存中…';
+  dom.settingsStatus.className = 'form-status';
+  dom.settingsSave.disabled = true;
+  try {
+    const res = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey: dom.settingsApiKey.value,
+        baseUrl: dom.settingsBaseUrl.value,
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      localStorage.setItem('claudio-api-key', dom.settingsApiKey.value);
+      localStorage.setItem('claudio-base-url', dom.settingsBaseUrl.value);
+      dom.settingsStatus.textContent = '✓ 已保存';
+      dom.settingsStatus.className = 'form-status success';
+    } else {
+      throw new Error(data.message || '保存失败');
+    }
+  } catch (err) {
+    dom.settingsStatus.textContent = `✗ ${err.message}`;
+    dom.settingsStatus.className = 'form-status error';
+  } finally {
+    dom.settingsSave.disabled = false;
+  }
+});
