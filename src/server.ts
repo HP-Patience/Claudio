@@ -94,7 +94,7 @@ const isMain =
 
 if (isMain) {
   start().then(({ shutdown }) => {
-    console.log(`Claudio server started on http://localhost:${process.env.PORT || 3000}`);
+    console.log(`Claudio server started on http://localhost:${process.env.PORT || 3005}`);
 
     process.on('SIGINT', async () => {
       console.log('\nShutting down...');

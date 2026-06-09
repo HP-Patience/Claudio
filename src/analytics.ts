@@ -30,7 +30,7 @@ function aggregatePlays(db: Database.Database, period: string): PlayAggregation 
     const key = `${row.song_name}|${row.artist}`;
     const existing = songCount.get(key);
     if (existing) { existing.count++; } else { songCount.set(key, { name: row.song_name, artist: row.artist, count: 1 }); }
-    const h = new Date(row.played_at + 'Z').getHours();
+    const h = parseInt((row.played_at.split(' ')[1] || '').split(':')[0] || '0', 10);
     if (h < 6) hourDist['0-6']++;
     else if (h < 12) hourDist['6-12']++;
     else if (h < 18) hourDist['12-18']++;
