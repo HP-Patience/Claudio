@@ -7,6 +7,7 @@ import { assemblePrompt } from './context.js';
 import { getSuggestedQueue } from './predictor.js';
 import type { createExecutor } from './executor.js';
 import { broadcast } from './ws.js';
+import { handleSkip } from './feedback.js';
 import { getSongUrl, getSongDetail } from './adapters/netease.js';
 import { getCurrentWeatherByCoords } from './adapters/weather.js';
 import fs from 'node:fs';
@@ -424,13 +425,29 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
 
   // ── Hide ──
 
-  app.post('/api/hide', (req: Request, res: Response) => {
+  app.post('/api/hide', async (req: Request, res: Response) => {
     if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
-    const { songId, name, artist } = req.body;
+    const { songId, name, artist, scene, sessionId } = req.body;
     if (!songId) return res.status(400).json({ error: 'songId required' });
 
     addHiddenSong(opts.db, songId, name || '', artist || '');
     res.json({ hidden: true });
+
+    // Trigger feedback check (fire-and-forget, don't block response)
+    if (sessionId) {
+      handleSkip({
+        db: opts.db,
+        songId,
+        songName: name || '',
+        artist: artist || '',
+        scene: scene || 'unknown',
+        sessionId,
+      }).then(result => {
+        if (result.corrected && result.say) {
+          broadcast('correction', { say: result.say, play: result.play });
+        }
+      }).catch(() => { /* ignore */ });
+    }
   });
 
   // ── Direct Play ──

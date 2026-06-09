@@ -42,6 +42,16 @@ export function initDb(db: Database.Database): void {
       artist TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS skips (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      song_id TEXT NOT NULL,
+      song_name TEXT NOT NULL DEFAULT '',
+      artist TEXT NOT NULL DEFAULT '',
+      scene TEXT NOT NULL DEFAULT '',
+      session_id TEXT NOT NULL DEFAULT '',
+      skipped_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 }
 
@@ -153,4 +163,20 @@ export function addHiddenSong(db: Database.Database, songId: string, songName: s
 export function isHidden(db: Database.Database, songId: string): boolean {
   const row = db.prepare('SELECT 1 FROM hidden_songs WHERE song_id = ?').get(songId);
   return row !== undefined;
+}
+
+// ── Skips ──
+
+export function addSkip(db: Database.Database, skip: {
+  song_id: string; song_name: string; artist: string; scene: string; session_id: string;
+}): void {
+  db.prepare(
+    'INSERT INTO skips (song_id, song_name, artist, scene, session_id) VALUES (?, ?, ?, ?, ?)'
+  ).run(skip.song_id, skip.song_name, skip.artist, skip.scene, skip.session_id);
+}
+
+export function getRecentSkips(db: Database.Database, sessionId: string, limit: number) {
+  return db.prepare(
+    'SELECT song_id, song_name, artist, scene, session_id, skipped_at FROM skips WHERE session_id = ? ORDER BY id DESC LIMIT ?'
+  ).all(sessionId, limit) as { song_id: string; song_name: string; artist: string; scene: string; session_id: string; skipped_at: string }[];
 }

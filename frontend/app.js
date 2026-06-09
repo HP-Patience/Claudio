@@ -12,6 +12,8 @@ const state = {
 
 let userCoords = null; // { lat, lon } from geolocation
 
+const sessionId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36);
+
 // ── DOM refs ──
 const $ = (s) => document.querySelector(s);
 const dom = {
@@ -169,7 +171,13 @@ dom.hideBtn.addEventListener('click', async () => {
     await fetch('/api/hide', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ songId: track.songId, name: track.name, artist: track.artist }),
+      body: JSON.stringify({
+        songId: track.songId,
+        name: track.name,
+        artist: track.artist,
+        scene: state._currentScene || 'unknown',
+        sessionId: sessionId,
+      }),
     });
   } catch { /* ignore */ }
 
@@ -572,6 +580,11 @@ function connectWs() {
           break;
         case 'status':
           if (msg.payload?.isPlaying !== undefined) state.isPlaying = msg.payload.isPlaying;
+          break;
+        case 'correction':
+          if (msg.payload?.say) {
+            addChatMessage(msg.payload.say, 'ai');
+          }
           break;
       }
     } catch { /* ignore parse errors */ }
