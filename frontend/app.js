@@ -607,12 +607,26 @@ async function loadFavorites() {
 async function init() {
   await loadFavorites();
 
-  // request geolocation for weather context
+  // request geolocation for weather context and suggested queue
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         userCoords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-        fetchWeather();
+        await fetchWeather();
+
+        // fetch suggested queue on load
+        try {
+          const params = new URLSearchParams({ lat: String(userCoords.lat), lon: String(userCoords.lon) });
+          const r = await fetch('/api/queue/suggested?' + params);
+          const data = await r.json();
+          if (data.play && data.play.length > 0) {
+            addChatMessage(data.say, 'ai');
+            state.queue = data.play.map(q => ({ songId: '', name: q, artist: '', url: '' }));
+            setQueue(state.queue);
+            state._currentScene = data.scene.scene;
+            addChatMessage(`📋 场景推荐 (${data.scene.scene}): ${data.reason}`, 'system');
+          }
+        } catch { /* ignore */ }
       },
       () => { /* user denied or unavailable */ },
       { timeout: 5000 },
@@ -622,24 +636,6 @@ async function init() {
   const hasHistory = await loadHistory();
   if (!hasHistory) {
     addChatMessage('你好！我是 Claudio，你的私人 AI 电台 DJ。想听什么？', 'ai');
-  }
-
-  // fetch suggested queue on load
-  if (userCoords) {
-    try {
-      const params = new URLSearchParams({ lat: String(userCoords.lat), lon: String(userCoords.lon) });
-      const r = await fetch('/api/queue/suggested?' + params);
-      const data = await r.json();
-      if (data.play && data.play.length > 0) {
-        // show greeting in chat
-        addChatMessage(data.say, 'ai');
-        // set as queue without auto-playing
-        state.queue = data.play.map(q => ({ songId: '', name: q, artist: '', url: '' }));
-        setQueue(state.queue);
-        state._currentScene = data.scene.scene;
-        addChatMessage(`📋 场景推荐 (${data.scene.scene}): ${data.reason}`, 'system');
-      }
-    } catch { /* ignore */ }
   }
 
   connectWs();
