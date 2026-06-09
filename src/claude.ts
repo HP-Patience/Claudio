@@ -11,6 +11,12 @@ export interface ClaudeOutput {
   raw?: string;
 }
 
+export interface ClaudeUsage {
+  input_tokens: number;
+  output_tokens: number;
+  context_window: number;
+}
+
 export function parseOutput(raw: string): ClaudeOutput {
   // Try to find and parse JSON in the response
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -39,7 +45,7 @@ interface InvokeOptions {
 export async function invokeClaude(
   prompt: string,
   options: InvokeOptions = {},
-): Promise<ClaudeOutput> {
+): Promise<ClaudeOutput & { usage?: ClaudeUsage }> {
   const { timeout = 120000, db } = options;
 
   const apiKey = db ? getPref(db, 'api_key') || process.env['ANTHROPIC_API_KEY'] || '' : process.env['ANTHROPIC_API_KEY'] || '';
@@ -57,6 +63,7 @@ export async function invokeClaude(
 
   try {
     let text: string;
+    let usage: ClaudeUsage | undefined;
 
     if (isAnthropic) {
       // Anthropic Messages API
@@ -79,11 +86,14 @@ export async function invokeClaude(
         const errText = await response.text().catch(() => 'unknown error');
         throw new Error(`API ${response.status}: ${errText.slice(0, 300)}`);
       }
-      const data = await response.json() as { content: Array<{ type: string; text: string }> };
+      const data = await response.json() as { content: Array<{ type: string; text: string }>; usage?: { input_tokens: number; output_tokens: number } };
       text = data.content?.[0]?.text || '';
+      if (data.usage) {
+        usage = { input_tokens: data.usage.input_tokens, output_tokens: data.usage.output_tokens, context_window: 200000 };
+      }
     } else {
       // OpenAI-compatible API (DeepSeek, etc.) — use https.request for reliability
-      text = await new Promise<string>((resolve, reject) => {
+      const result = await new Promise<{ text: string; usage?: ClaudeUsage }>((resolve, reject) => {
         const body = JSON.stringify({
           model: 'deepseek-chat',
           max_tokens: 1024,
@@ -108,7 +118,11 @@ export async function invokeClaude(
             if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
               try {
                 const parsed = JSON.parse(data);
-                resolve(parsed.choices?.[0]?.message?.content || '');
+                text = parsed.choices?.[0]?.message?.content || '';
+                if (parsed.usage) {
+                  usage = { input_tokens: parsed.usage.prompt_tokens ?? 0, output_tokens: parsed.usage.completion_tokens ?? 0, context_window: 128000 };
+                }
+                resolve({ text, usage });
               } catch { reject(new Error('JSON parse error')); }
             } else {
               reject(new Error(`API ${res.statusCode}: ${data.slice(0, 300)}`));
@@ -121,9 +135,12 @@ export async function invokeClaude(
         req.end();
       });
       clearTimeout(timer);
+      text = result.text;
+      usage = result.usage;
     }
 
-    return parseOutput(text);
+    const output = parseOutput(text);
+    return { ...output, usage };
   } catch (err) {
     clearTimeout(timer);
     if (err instanceof Error && err.name === 'AbortError') {

@@ -28,6 +28,20 @@ export function initDb(db: Database.Database): void {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL DEFAULT ''
     );
+
+    CREATE TABLE IF NOT EXISTS favorites (
+      song_id TEXT PRIMARY KEY,
+      song_name TEXT NOT NULL DEFAULT '',
+      artist TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS hidden_songs (
+      song_id TEXT PRIMARY KEY,
+      song_name TEXT NOT NULL DEFAULT '',
+      artist TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 }
 
@@ -103,4 +117,40 @@ export function cleanup(db: Database.Database, keepDays: number): void {
   db.prepare(
     "DELETE FROM plays WHERE played_at < datetime('now', '-' || ? || ' days')",
   ).run(keepDays);
+}
+
+// ── Favorites ──
+
+export function addFavorite(db: Database.Database, songId: string, songName: string, artist: string): void {
+  db.prepare('INSERT OR REPLACE INTO favorites (song_id, song_name, artist) VALUES (?, ?, ?)').run(
+    songId, songName, artist,
+  );
+}
+
+export function removeFavorite(db: Database.Database, songId: string): void {
+  db.prepare('DELETE FROM favorites WHERE song_id = ?').run(songId);
+}
+
+export function isFavorite(db: Database.Database, songId: string): boolean {
+  const row = db.prepare('SELECT 1 FROM favorites WHERE song_id = ?').get(songId);
+  return row !== undefined;
+}
+
+export function getFavorites(db: Database.Database) {
+  return db.prepare('SELECT song_id, song_name, artist, created_at FROM favorites ORDER BY created_at DESC').all() as {
+    song_id: string; song_name: string; artist: string; created_at: string;
+  }[];
+}
+
+// ── Hidden Songs ──
+
+export function addHiddenSong(db: Database.Database, songId: string, songName: string, artist: string): void {
+  db.prepare('INSERT OR REPLACE INTO hidden_songs (song_id, song_name, artist) VALUES (?, ?, ?)').run(
+    songId, songName, artist,
+  );
+}
+
+export function isHidden(db: Database.Database, songId: string): boolean {
+  const row = db.prepare('SELECT 1 FROM hidden_songs WHERE song_id = ?').get(songId);
+  return row !== undefined;
 }

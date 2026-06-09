@@ -15,7 +15,7 @@ interface StartOptions {
 }
 
 export async function start(options: StartOptions = {}) {
-  const port = options.port !== undefined ? options.port : (Number(process.env.PORT) || 3000);
+  const port = options.port !== undefined ? options.port : (Number(process.env.PORT) || 3005);
 
   // init DB
   const dbDir = path.dirname(DB_PATH);

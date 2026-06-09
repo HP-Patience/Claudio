@@ -7,6 +7,7 @@ const state = {
   currentTrack: null,
   volume: parseInt(localStorage.getItem('claudio-volume') || '80'),
   queue: [],
+  lovedSongs: new Set(),
 };
 
 // ── DOM refs ──
@@ -32,6 +33,7 @@ const dom = {
   connectionStatus: $('#connection-status'),
   ncmStatus: $('#ncm-status'),
   queueCount: $('#queue-count'),
+  tokenUsage: $('#token-usage'),
   themeToggle: $('#theme-toggle'),
   settingsToggle: $('#settings-toggle'),
   settingsModal: $('#settings-modal'),
@@ -42,6 +44,8 @@ const dom = {
   settingsTest: $('#settings-test'),
   settingsSave: $('#settings-save'),
   settingsKeyEye: $('#settings-key-eye'),
+  loveBtn: $('#love-btn'),
+  hideBtn: $('#hide-btn'),
 };
 
 // ── audio ──
@@ -119,6 +123,49 @@ dom.playBtn.addEventListener('click', () => togglePlay());
 dom.prevBtn.addEventListener('click', () => prevTrack());
 dom.nextBtn.addEventListener('click', () => nextTrack());
 
+// ── love button ──
+dom.loveBtn.addEventListener('click', async () => {
+  const track = state.currentTrack;
+  if (!track || !track.songId) return;
+
+  const loved = state.lovedSongs.has(track.songId);
+  try {
+    const res = await fetch('/api/favorites/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ songId: track.songId, name: track.name, artist: track.artist }),
+    });
+    const data = await res.json();
+    if (data.loved) {
+      state.lovedSongs.add(track.songId);
+      dom.loveBtn.textContent = '♥';
+      dom.loveBtn.classList.add('loved');
+    } else {
+      state.lovedSongs.delete(track.songId);
+      dom.loveBtn.textContent = '♡';
+      dom.loveBtn.classList.remove('loved');
+    }
+  } catch { /* ignore */ }
+});
+
+// ── hide button ──
+dom.hideBtn.addEventListener('click', async () => {
+  const track = state.currentTrack;
+  if (!track || !track.songId) return;
+
+  try {
+    await fetch('/api/hide', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ songId: track.songId, name: track.name, artist: track.artist }),
+    });
+  } catch { /* ignore */ }
+
+  if (state.queue.length > 1) {
+    nextTrack();
+  }
+});
+
 function togglePlay() {
   if (audio.paused && audio.src) {
     audio.play();
@@ -157,6 +204,15 @@ function playTrack(item) {
   dom.nowPlaying.textContent = `${item.name} - ${item.artist}`;
   dom.onAir.classList.add('active');
   addChatMessage(`🎵 Now playing: ${item.name} — ${item.artist}`, 'system');
+
+  // sync love button
+  if (item.songId && state.lovedSongs.has(item.songId)) {
+    dom.loveBtn.textContent = '♥';
+    dom.loveBtn.classList.add('loved');
+  } else {
+    dom.loveBtn.textContent = '♡';
+    dom.loveBtn.classList.remove('loved');
+  }
 }
 
 // ── progress bar drag/click ──
@@ -291,6 +347,12 @@ function connectWs() {
             addChatMessage(msg.payload.text, 'ai');
           }
           break;
+        case 'token_usage':
+          if (msg.payload) {
+            const pct = ((msg.payload.input_tokens / msg.payload.context_window) * 100).toFixed(1);
+            dom.tokenUsage.textContent = `${(msg.payload.input_tokens / 1000).toFixed(1)}K / ${(msg.payload.context_window / 1000).toFixed(0)}K (${pct}%)`;
+          }
+          break;
         case 'status':
           if (msg.payload?.isPlaying !== undefined) state.isPlaying = msg.payload.isPlaying;
           break;
@@ -315,7 +377,18 @@ async function loadHistory() {
   return false;
 }
 
+async function loadFavorites() {
+  try {
+    const res = await fetch('/api/favorites');
+    const data = await res.json();
+    for (const fav of data.favorites || []) {
+      state.lovedSongs.add(fav.song_id);
+    }
+  } catch { /* ignore */ }
+}
+
 async function init() {
+  await loadFavorites();
   const hasHistory = await loadHistory();
   if (!hasHistory) {
     addChatMessage('你好！我是 Claudio，你的私人 AI 电台 DJ。想听什么？', 'ai');

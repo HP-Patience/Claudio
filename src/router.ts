@@ -1,7 +1,7 @@
 import express from 'express';
 import type { Express, Request, Response } from 'express';
 import type Database from 'better-sqlite3';
-import { getRecentPlays, getPlan, addMessage, getMessages, getPref, setPref } from './db.js';
+import { getRecentPlays, getPlan, addMessage, getMessages, getPref, setPref, addFavorite, removeFavorite, isFavorite, getFavorites, addHiddenSong } from './db.js';
 import { invokeClaude } from './claude.js';
 import { assemblePrompt } from './context.js';
 import type { createExecutor } from './executor.js';
@@ -97,6 +97,10 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
 }`;
 
     const result = await invokeClaude(fullPrompt, { db: opts.db });
+
+    if (result.usage) {
+      broadcast('token_usage', result.usage);
+    }
 
     // Save AI reply to DB
     if (opts.db && result.say) {
@@ -255,6 +259,38 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
     } catch {
       res.json({ online: false, reason: 'unreachable' });
     }
+  });
+
+  // ── Favorites ──
+
+  app.get('/api/favorites', (_req: Request, res: Response) => {
+    if (!opts.db) return res.json({ favorites: [] });
+    res.json({ favorites: getFavorites(opts.db) });
+  });
+
+  app.post('/api/favorites/toggle', (req: Request, res: Response) => {
+    if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
+    const { songId, name, artist } = req.body;
+    if (!songId) return res.status(400).json({ error: 'songId required' });
+
+    if (isFavorite(opts.db, songId)) {
+      removeFavorite(opts.db, songId);
+      res.json({ loved: false });
+    } else {
+      addFavorite(opts.db, songId, name || '', artist || '');
+      res.json({ loved: true });
+    }
+  });
+
+  // ── Hide ──
+
+  app.post('/api/hide', (req: Request, res: Response) => {
+    if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
+    const { songId, name, artist } = req.body;
+    if (!songId) return res.status(400).json({ error: 'songId required' });
+
+    addHiddenSong(opts.db, songId, name || '', artist || '');
+    res.json({ hidden: true });
   });
 
   return app;
