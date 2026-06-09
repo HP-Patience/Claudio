@@ -7,6 +7,7 @@ import { assemblePrompt } from './context.js';
 import type { createExecutor } from './executor.js';
 import { broadcast } from './ws.js';
 import { getSongUrl, getSongDetail } from './adapters/netease.js';
+import { getCurrentWeatherByCoords } from './adapters/weather.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
@@ -113,7 +114,10 @@ export function createApp(opts: RouterOptions = {}): Express {
     let calendar = '';
     if (opts.executor) {
       try {
-        const ctx = await opts.executor.getContext();
+        const { lat, lon } = req.body;
+        const ctx = await opts.executor.getContext(
+          (lat != null && lon != null) ? { lat: Number(lat), lon: Number(lon) } : undefined
+        );
         weather = ctx.weather;
         calendar = ctx.calendar;
       } catch {
@@ -339,6 +343,20 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
       }
     } catch {
       res.json({ online: false, reason: 'unreachable' });
+    }
+  });
+
+  // ── Weather ──
+
+  app.get('/api/weather', async (req: Request, res: Response) => {
+    const lat = Number(req.query.lat);
+    const lon = Number(req.query.lon);
+    if (isNaN(lat) || isNaN(lon)) return res.status(400).json({ error: 'lat and lon required' });
+    try {
+      const data = await getCurrentWeatherByCoords(lat, lon);
+      res.json(data);
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
     }
   });
 

@@ -1,5 +1,5 @@
 import { searchSongs, getSongUrl } from './adapters/netease.js';
-import { getCurrentWeather } from './adapters/weather.js';
+import { getCurrentWeather, getCurrentWeatherByCoords } from './adapters/weather.js';
 import { getTodayEvents } from './adapters/feishu.js';
 
 export interface PlayState {
@@ -81,9 +81,13 @@ export function createExecutor() {
     acquireSpeaker: () => { state.isSpeaking = true; },
     releaseSpeaker: () => { state.isSpeaking = false; },
 
-    getContext: async (city?: string) => {
+    getContext: async (opts?: { lat?: number; lon?: number }) => {
+      const lat = opts?.lat;
+      const lon = opts?.lon;
       const [weatherResult, events] = await Promise.allSettled([
-        city ? getCurrentWeather(city) : Promise.reject(new Error('no city')),
+        (lat != null && lon != null)
+          ? getCurrentWeatherByCoords(lat, lon)
+          : Promise.reject(new Error('no location')),
         getTodayEvents(),
       ]);
 

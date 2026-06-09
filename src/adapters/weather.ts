@@ -26,3 +26,17 @@ export async function getCurrentWeather(city: string): Promise<WeatherData> {
     icon: data.weather[0].icon,
   };
 }
+
+export async function getCurrentWeatherByCoords(lat: number, lon: number): Promise<WeatherData> {
+  const url = `${BASE}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=zh_cn`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Weather API error: ${res.status}`);
+  const data = await res.json();
+  return {
+    city: data.name,
+    temp: data.main.temp,
+    feelsLike: data.main.feels_like,
+    description: data.weather[0].description,
+    icon: data.weather[0].icon,
+  };
+}

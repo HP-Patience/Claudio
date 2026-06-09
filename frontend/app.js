@@ -10,6 +10,8 @@ const state = {
   lovedSongs: new Set(),
 };
 
+let userCoords = null; // { lat, lon } from geolocation
+
 // ── DOM refs ──
 const $ = (s) => document.querySelector(s);
 const dom = {
@@ -485,10 +487,15 @@ async function sendChat(text) {
   dom.chatInput.value = '';
 
   try {
+    const body = { text };
+    if (userCoords) {
+      body.lat = userCoords.lat;
+      body.lon = userCoords.lon;
+    }
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (data.claude && data.say) {
@@ -571,6 +578,21 @@ async function loadHistory() {
   return false;
 }
 
+async function fetchWeather() {
+  if (!userCoords) return;
+  try {
+    const res = await fetch(`/api/weather?lat=${userCoords.lat}&lon=${userCoords.lon}`);
+    const data = await res.json();
+    if (data.city) {
+      dom.onAir.innerHTML = '';
+      const dot = document.createElement('span');
+      dot.className = 'on-air-dot';
+      dom.onAir.appendChild(dot);
+      dom.onAir.appendChild(document.createTextNode(`ON AIR  ☼ ${data.city} ${data.temp}°C ${data.description}`));
+    }
+  } catch { /* ignore */ }
+}
+
 async function loadFavorites() {
   try {
     const res = await fetch('/api/favorites');
@@ -584,6 +606,19 @@ async function loadFavorites() {
 
 async function init() {
   await loadFavorites();
+
+  // request geolocation for weather context
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        userCoords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        fetchWeather();
+      },
+      () => { /* user denied or unavailable */ },
+      { timeout: 5000 },
+    );
+  }
+
   const hasHistory = await loadHistory();
   if (!hasHistory) {
     addChatMessage('你好！我是 Claudio，你的私人 AI 电台 DJ。想听什么？', 'ai');
