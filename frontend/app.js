@@ -623,6 +623,25 @@ async function init() {
   if (!hasHistory) {
     addChatMessage('你好！我是 Claudio，你的私人 AI 电台 DJ。想听什么？', 'ai');
   }
+
+  // fetch suggested queue on load
+  if (userCoords) {
+    try {
+      const params = new URLSearchParams({ lat: String(userCoords.lat), lon: String(userCoords.lon) });
+      const r = await fetch('/api/queue/suggested?' + params);
+      const data = await r.json();
+      if (data.play && data.play.length > 0) {
+        // show greeting in chat
+        addChatMessage(data.say, 'ai');
+        // set as queue without auto-playing
+        state.queue = data.play.map(q => ({ songId: '', name: q, artist: '', url: '' }));
+        setQueue(state.queue);
+        state._currentScene = data.scene.scene;
+        addChatMessage(`📋 场景推荐 (${data.scene.scene}): ${data.reason}`, 'system');
+      }
+    } catch { /* ignore */ }
+  }
+
   connectWs();
 }
 

@@ -4,6 +4,7 @@ import type Database from 'better-sqlite3';
 import { getRecentPlays, getPlan, addMessage, getMessages, getPref, setPref, addFavorite, removeFavorite, isFavorite, getFavorites, addHiddenSong } from './db.js';
 import { invokeClaude } from './claude.js';
 import { assemblePrompt } from './context.js';
+import { getSuggestedQueue } from './predictor.js';
 import type { createExecutor } from './executor.js';
 import { broadcast } from './ws.js';
 import { getSongUrl, getSongDetail } from './adapters/netease.js';
@@ -220,6 +221,27 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
     if (!opts.executor) return res.json({ queue: [], current: null });
     const ps = opts.executor.getPlayState();
     res.json({ queue: ps.queue, current: ps.currentSong });
+  });
+
+  app.get('/api/queue/suggested', async (req: Request, res: Response) => {
+    if (!opts.db || !opts.executor) {
+      return res.status(503).json({ error: 'unavailable' });
+    }
+    try {
+      const { lat, lon } = req.query;
+      const ctx = await opts.executor.getContext(
+        (lat != null && lon != null) ? { lat: Number(lat), lon: Number(lon) } : undefined
+      );
+      const suggestion = await getSuggestedQueue({
+        db: opts.db,
+        weather: ctx.weather,
+        calendar: ctx.calendar,
+      });
+      res.json(suggestion);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown';
+      res.status(502).json({ error: msg });
+    }
   });
 
   app.get('/api/plan/today', (_req: Request, res: Response) => {
