@@ -83,7 +83,7 @@ setInterval(updateClock, 1000);
 audio.addEventListener('timeupdate', () => {
   if (audio.duration) {
     const pct = (audio.currentTime / audio.duration) * 100;
-    dom.progress.style.width = `${pct}%`;
+    dom.progressBar.style.width = `${pct}%`;
     dom.currentTime.textContent = formatTime(audio.currentTime);
     dom.duration.textContent = formatTime(audio.duration);
   }
@@ -159,15 +159,31 @@ function playTrack(item) {
   addChatMessage(`🎵 Now playing: ${item.name} — ${item.artist}`, 'system');
 }
 
-// ── progress bar click ──
+// ── progress bar drag/click ──
 const progressContainer = document.querySelector('.progress-container');
 if (progressContainer) {
-  progressContainer.addEventListener('click', (e) => {
+  let dragging = false;
+
+  const seek = (e) => {
     const rect = progressContainer.getBoundingClientRect();
-    const pct = (e.clientX - rect.left) / rect.width;
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     if (audio.duration) {
       audio.currentTime = pct * audio.duration;
     }
+  };
+
+  progressContainer.addEventListener('mousedown', (e) => {
+    dragging = true;
+    seek(e);
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    seek(e);
+  });
+
+  document.addEventListener('mouseup', () => {
+    dragging = false;
   });
 }
 
@@ -180,7 +196,7 @@ dom.volumeSlider.addEventListener('input', () => {
 
 // ── chat ──
 let lastAiText = '';
-function addChatMessage(text, type = 'ai') {
+function addChatMessage(text, type = 'ai', createdAt) {
   if (type === 'ai' && text === lastAiText) return;
   if (type === 'ai') lastAiText = text;
   const bubble = document.createElement('div');
@@ -205,8 +221,8 @@ function addChatMessage(text, type = 'ai') {
 
   const meta = document.createElement('div');
   meta.className = 'bubble-meta';
-  const now = new Date();
-  meta.textContent = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const ts = createdAt ? new Date(createdAt + 'Z') : new Date();
+  meta.textContent = `${String(ts.getHours()).padStart(2, '0')}:${String(ts.getMinutes()).padStart(2, '0')}`;
   bubble.appendChild(meta);
 
   dom.chatMessages.appendChild(bubble);
@@ -283,7 +299,31 @@ function connectWs() {
   };
 }
 
-connectWs();
+// ── load history from server ──
+async function loadHistory() {
+  try {
+    const res = await fetch('/api/messages');
+    const data = await res.json();
+    if (data.messages && data.messages.length > 0) {
+      for (const msg of data.messages) {
+        const role = msg.role === 'user' ? 'user' : 'ai';
+        addChatMessage(msg.content, role, msg.created_at);
+      }
+      return true;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
+async function init() {
+  const hasHistory = await loadHistory();
+  if (!hasHistory) {
+    addChatMessage('你好！我是 Claudio，你的私人 AI 电台 DJ。想听什么？', 'ai');
+  }
+  connectWs();
+}
+
+init();
 
 // ── NCM API status polling ──
 async function checkNcmStatus() {
@@ -301,9 +341,6 @@ async function checkNcmStatus() {
 checkNcmStatus();
 setInterval(checkNcmStatus, 30000);
 
-// ── welcome message ──
-addChatMessage('你好！我是 Claudio，你的私人 AI 电台 DJ。想听什么？', 'ai');
-
 // ── Settings ──
 dom.settingsToggle.addEventListener('click', () => {
   loadConfig();
@@ -316,8 +353,14 @@ function closeSettings() {
   dom.settingsStatus.className = 'form-status';
 }
 dom.settingsClose.addEventListener('click', closeSettings);
+let settingsMousedownTarget = null;
+dom.settingsModal.addEventListener('mousedown', (e) => {
+  settingsMousedownTarget = e.target;
+});
 dom.settingsModal.addEventListener('click', (e) => {
-  if (e.target === dom.settingsModal) closeSettings();
+  if (e.target === dom.settingsModal && settingsMousedownTarget === dom.settingsModal) {
+    closeSettings();
+  }
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && dom.settingsModal.classList.contains('open')) closeSettings();

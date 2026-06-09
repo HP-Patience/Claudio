@@ -48,9 +48,13 @@ export function createApp(opts: RouterOptions = {}): Express {
     const { text } = req.body;
 
     if (classifyIntent(text) === 'simple') {
+      if (opts.db) addMessage(opts.db, { role: 'user', content: text });
       res.json({ talk: false, claude: false, action: text.trim() });
       return;
     }
+
+    // Save user message to DB
+    if (opts.db) addMessage(opts.db, { role: 'user', content: text });
 
     // Fetch real context if executor is available
     let weather = '';
@@ -94,6 +98,11 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
 
     const result = await invokeClaude(fullPrompt, { db: opts.db });
 
+    // Save AI reply to DB
+    if (opts.db && result.say) {
+      addMessage(opts.db, { role: 'assistant', content: result.say });
+    }
+
     // Execute play actions if executor is available
     let playedItems;
     if (opts.executor && result.play && result.play.length > 0) {
@@ -134,6 +143,12 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
         error: true,
       });
     }
+  });
+
+  app.get('/api/messages', (_req: Request, res: Response) => {
+    if (!opts.db) return res.json({ messages: [] });
+    const messages = getMessages(opts.db, 100).reverse();
+    res.json({ messages });
   });
 
   app.get('/api/now', (_req: Request, res: Response) => {
