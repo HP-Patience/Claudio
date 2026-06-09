@@ -552,11 +552,11 @@ function connectWs() {
       switch (msg.type) {
         case 'play':
           if (msg.payload?.tracks) {
-            setQueue(msg.payload.tracks);
-            playTrack(msg.payload.tracks[0]);
             if (msg.payload.arc) {
               state._arcSteps = msg.payload.arc.steps;
             }
+            setQueue(msg.payload.tracks);
+            playTrack(msg.payload.tracks[0]);
           }
           break;
         case 'say':
