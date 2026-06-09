@@ -4,12 +4,20 @@ interface UPnPDevice {
   host: string;
 }
 
-function getDevices(): UPnPDevice[] {
+let devices: UPnPDevice[] = (() => {
   try {
     return JSON.parse(process.env.UPNP_DEVICES ?? '[]') as UPnPDevice[];
   } catch {
     return [];
   }
+})();
+
+export function setUpnpDevices(list: UPnPDevice[]): void {
+  devices = list;
+}
+
+function getDevices(): UPnPDevice[] {
+  return devices;
 }
 
 function getDevice(id: string): UPnPDevice {

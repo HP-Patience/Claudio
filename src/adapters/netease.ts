@@ -1,4 +1,8 @@
-const BASE = process.env.NCM_API ?? 'http://localhost:3001';
+let BASE = process.env.NCM_API ?? 'http://localhost:3001';
+
+export function setNcmBase(url: string): void {
+  if (url) BASE = url;
+}
 
 export interface Song {
   id: number;

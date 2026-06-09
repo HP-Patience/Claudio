@@ -1,4 +1,8 @@
-const API_KEY = process.env.OPENWEATHER_API_KEY ?? '';
+let API_KEY = process.env.OPENWEATHER_API_KEY ?? '';
+
+export function setWeatherKey(key: string): void {
+  if (key) API_KEY = key;
+}
 const BASE = 'https://api.openweathermap.org/data/2.5';
 
 export interface WeatherData {

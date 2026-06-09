@@ -435,7 +435,19 @@ body {
 }
 .modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
 
-.modal-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.modal-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-height: 60vh; overflow-y: auto; }
+
+.form-fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 0;
+}
+
+.form-legend {
+  font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--accent); padding: 0 6px;
+}
 
 .modal-footer {
   display: flex; gap: 8px; justify-content: flex-end;
@@ -456,17 +468,6 @@ body {
 }
 .form-input:focus { border-color: var(--accent); }
 .form-input::placeholder { color: var(--text-muted); }
-
-.input-with-eye { display: flex; position: relative; }
-.input-with-eye .form-input { flex: 1; padding-right: 36px; }
-.eye-btn {
-  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-  width: 28px; height: 28px; border: none; border-radius: var(--radius-sm);
-  background: transparent; color: var(--text-muted); cursor: pointer;
-  font-size: 14px; display: flex; align-items: center; justify-content: center;
-  transition: all .2s; line-height: 1;
-}
-.eye-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
 
 .form-status {
   font-size: 11px; min-height: 16px;

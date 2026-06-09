@@ -1,5 +1,10 @@
-const APP_ID = process.env.FEISHU_APP_ID ?? '';
-const APP_SECRET = process.env.FEISHU_APP_SECRET ?? '';
+let APP_ID = process.env.FEISHU_APP_ID ?? '';
+let APP_SECRET = process.env.FEISHU_APP_SECRET ?? '';
+
+export function setFeishuConfig(appId: string, appSecret: string): void {
+  if (appId) APP_ID = appId;
+  if (appSecret) APP_SECRET = appSecret;
+}
 const AUTH_URL = 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal';
 const CALENDAR_URL = 'https://open.feishu.cn/open-apis/calendar/v4/events';
 

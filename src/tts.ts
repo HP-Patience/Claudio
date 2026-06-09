@@ -16,6 +16,12 @@ export function ensureCacheDir(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });
 }
 
+let defaultApiKey = process.env.FISH_AUDIO_API_KEY ?? '';
+
+export function setFishKey(key: string): void {
+  if (key) defaultApiKey = key;
+}
+
 export async function synthesize(
   text: string,
   options: TtsOptions,
@@ -27,7 +33,7 @@ export async function synthesize(
     return cachePath;
   }
 
-  const apiKey = options.apiKey ?? process.env.FISH_AUDIO_API_KEY;
+  const apiKey = options.apiKey ?? defaultApiKey;
   try {
     const response = await fetch('https://api.fish.audio/v1/tts', {
       method: 'POST',

@@ -41,10 +41,15 @@ const dom = {
   settingsClose: $('#settings-close'),
   settingsApiKey: $('#settings-api-key'),
   settingsBaseUrl: $('#settings-base-url'),
+  settingsNcmApi: $('#settings-ncm-api'),
+  settingsWeatherKey: $('#settings-weather-key'),
+  settingsFishKey: $('#settings-fish-key'),
+  settingsFeishuAppId: $('#settings-feishu-app-id'),
+  settingsFeishuAppSecret: $('#settings-feishu-app-secret'),
+  settingsUpnpDevices: $('#settings-upnp-devices'),
   settingsStatus: $('#settings-status'),
   settingsTest: $('#settings-test'),
   settingsSave: $('#settings-save'),
-  settingsKeyEye: $('#settings-key-eye'),
   loveBtn: $('#love-btn'),
   hideBtn: $('#hide-btn'),
   queuePanel: $('#queue-panel'),
@@ -605,8 +610,8 @@ checkNcmStatus();
 setInterval(checkNcmStatus, 30000);
 
 // ── Settings ──
-dom.settingsToggle.addEventListener('click', () => {
-  loadConfig();
+dom.settingsToggle.addEventListener('click', async () => {
+  await loadConfig();
   dom.settingsModal.classList.add('open');
 });
 
@@ -635,23 +640,17 @@ async function loadConfig() {
     const data = await res.json();
     dom.settingsApiKey.value = data.apiKey || '';
     dom.settingsBaseUrl.value = data.baseUrl || 'https://api.anthropic.com';
+    dom.settingsNcmApi.value = data.ncmApi || 'http://localhost:3001';
+    dom.settingsWeatherKey.value = data.weatherKey || '';
+    dom.settingsFishKey.value = data.fishKey || '';
+    dom.settingsFeishuAppId.value = data.feishuAppId || '';
+    dom.settingsFeishuAppSecret.value = data.feishuAppSecret || '';
+    dom.settingsUpnpDevices.value = data.upnpDevices || '[]';
   } catch (err) {
     dom.settingsStatus.textContent = `加载失败: ${err.message}`;
     dom.settingsStatus.className = 'form-status error';
   }
 }
-
-// Eye toggle for API key
-dom.settingsKeyEye.addEventListener('click', () => {
-  const input = dom.settingsApiKey;
-  if (input.type === 'password') {
-    input.type = 'text';
-    dom.settingsKeyEye.textContent = '👁‍🗨';
-  } else {
-    input.type = 'password';
-    dom.settingsKeyEye.textContent = '👁';
-  }
-});
 
 dom.settingsTest.addEventListener('click', async () => {
   dom.settingsStatus.textContent = '测试中…';
@@ -693,12 +692,16 @@ dom.settingsSave.addEventListener('click', async () => {
       body: JSON.stringify({
         apiKey: dom.settingsApiKey.value,
         baseUrl: dom.settingsBaseUrl.value,
+        ncmApi: dom.settingsNcmApi.value,
+        weatherKey: dom.settingsWeatherKey.value,
+        fishKey: dom.settingsFishKey.value,
+        feishuAppId: dom.settingsFeishuAppId.value,
+        feishuAppSecret: dom.settingsFeishuAppSecret.value,
+        upnpDevices: dom.settingsUpnpDevices.value,
       }),
     });
     const data = await res.json();
     if (data.ok) {
-      localStorage.setItem('claudio-api-key', dom.settingsApiKey.value);
-      localStorage.setItem('claudio-base-url', dom.settingsBaseUrl.value);
       dom.settingsStatus.textContent = '✓ 已保存';
       dom.settingsStatus.className = 'form-status success';
     } else {

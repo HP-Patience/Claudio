@@ -11,6 +11,57 @@ import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
 
+const ENV_PATH = path.resolve('.env');
+
+const ENV_KEY_MAP: Record<string, string> = {
+  ncmApi: 'NCM_API',
+  weatherKey: 'OPENWEATHER_API_KEY',
+  fishKey: 'FISH_AUDIO_API_KEY',
+  feishuAppId: 'FEISHU_APP_ID',
+  feishuAppSecret: 'FEISHU_APP_SECRET',
+  upnpDevices: 'UPNP_DEVICES',
+  userCorpusDir: 'USER_CORPUS_DIR',
+};
+
+function syncEnvFile(updates: Record<string, string | undefined>): void {
+  let content = '';
+  try { content = fs.readFileSync(ENV_PATH, 'utf-8'); } catch { /* no .env yet */ }
+
+  const lines = content.split('\n');
+
+  for (const [jsKey, envKey] of Object.entries(ENV_KEY_MAP)) {
+    const val = updates[jsKey];
+    if (val === undefined) continue;
+
+    const lineIdx = lines.findIndex((l) =>
+      l.startsWith(`${envKey}=`) || l.startsWith(`# ${envKey}=`));
+
+    const newLine = `${envKey}=${val}`;
+    if (lineIdx >= 0) {
+      lines[lineIdx] = newLine;
+    } else {
+      lines.push(newLine);
+    }
+  }
+
+  fs.writeFileSync(ENV_PATH, lines.join('\n') + '\n', 'utf-8');
+}
+
+function readEnvFile(): Record<string, string> {
+  const result: Record<string, string> = {};
+  try {
+    const content = fs.readFileSync(ENV_PATH, 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+      result[trimmed.slice(0, eqIdx).trim()] = trimmed.slice(eqIdx + 1).trim();
+    }
+  } catch { /* .env not found */ }
+  return result;
+}
+
 const NCM_API_BASE = process.env.NCM_API ?? 'http://localhost:3001';
 
 const SIMPLE_COMMANDS = new Set([
@@ -72,7 +123,7 @@ export function createApp(opts: RouterOptions = {}): Express {
 
     const history = opts.db ? getMessages(opts.db, 10).reverse() : [];
     const basePrompt = assemblePrompt({
-      userCorpusDir: process.env.USER_CORPUS_DIR ?? 'user',
+      userCorpusDir: (opts.db ? getPref(opts.db, 'user_corpus_dir') : null) ?? process.env.USER_CORPUS_DIR ?? 'user',
       weather,
       calendar,
       time: new Date().toLocaleString('zh-CN'),
@@ -177,20 +228,43 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
   // ── API 配置 ──
   app.get('/api/config', (req: Request, res: Response) => {
     if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
-    const apiKey = getPref(opts.db, 'api_key') || '';
-    const baseUrl = getPref(opts.db, 'api_base_url') || '';
-    res.json({ apiKey, baseUrl });
+    const env = readEnvFile();
+    const apiKey = env.ANTHROPIC_API_KEY || getPref(opts.db, 'api_key') || '';
+    const baseUrl = env.ANTHROPIC_BASE_URL || getPref(opts.db, 'api_base_url') || '';
+    const ncmApi = env.NCM_API || getPref(opts.db, 'ncm_api') || '';
+    const weatherKey = env.OPENWEATHER_API_KEY || getPref(opts.db, 'weather_key') || '';
+    const fishKey = env.FISH_AUDIO_API_KEY || getPref(opts.db, 'fish_key') || '';
+    const feishuAppId = env.FEISHU_APP_ID || getPref(opts.db, 'feishu_app_id') || '';
+    const feishuAppSecret = env.FEISHU_APP_SECRET || getPref(opts.db, 'feishu_app_secret') || '';
+    const upnpDevices = env.UPNP_DEVICES || getPref(opts.db, 'upnp_devices') || '[]';
+    const userCorpusDir = env.USER_CORPUS_DIR || getPref(opts.db, 'user_corpus_dir') || '';
+    res.json({ apiKey, baseUrl, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir });
   });
 
   app.post('/api/config', (req: Request, res: Response) => {
     if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
-    const { apiKey, baseUrl } = req.body;
-    if (apiKey !== undefined && !apiKey.includes('*')) {
+    const { apiKey, baseUrl, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir } = req.body;
+    // Secrets: skip empty or masked values to avoid overwriting with placeholder
+    if (apiKey !== undefined && apiKey !== '' && !apiKey.includes('*')) {
       setPref(opts.db, 'api_key', apiKey);
     }
-    if (baseUrl !== undefined) {
-      setPref(opts.db, 'api_base_url', baseUrl);
+    if (weatherKey !== undefined && weatherKey !== '' && !weatherKey.includes('*')) {
+      setPref(opts.db, 'weather_key', weatherKey);
     }
+    if (fishKey !== undefined && fishKey !== '' && !fishKey.includes('*')) {
+      setPref(opts.db, 'fish_key', fishKey);
+    }
+    if (feishuAppSecret !== undefined && feishuAppSecret !== '' && !feishuAppSecret.includes('*')) {
+      setPref(opts.db, 'feishu_app_secret', feishuAppSecret);
+    }
+    // Non-secrets: allow empty to clear
+    if (baseUrl !== undefined) setPref(opts.db, 'api_base_url', baseUrl);
+    if (ncmApi !== undefined) setPref(opts.db, 'ncm_api', ncmApi);
+    if (feishuAppId !== undefined) setPref(opts.db, 'feishu_app_id', feishuAppId);
+    if (upnpDevices !== undefined) setPref(opts.db, 'upnp_devices', upnpDevices);
+    if (userCorpusDir !== undefined) setPref(opts.db, 'user_corpus_dir', userCorpusDir);
+
+    syncEnvFile({ ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir });
     res.json({ ok: true });
   });
 

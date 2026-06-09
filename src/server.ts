@@ -1,10 +1,15 @@
 import express from 'express';
 import http from 'node:http';
 import Database from 'better-sqlite3';
-import { initDb } from './db.js';
+import { initDb, getPref } from './db.js';
 import { createApp } from './router.js';
 import { createWss } from './ws.js';
 import { createExecutor } from './executor.js';
+import { setNcmBase } from './adapters/netease.js';
+import { setWeatherKey } from './adapters/weather.js';
+import { setFeishuConfig } from './adapters/feishu.js';
+import { setUpnpDevices } from './adapters/upnp.js';
+import { setFishKey } from './tts.js';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -24,6 +29,21 @@ export async function start(options: StartOptions = {}) {
   }
   const db = new Database(DB_PATH);
   initDb(db);
+
+  // Inject config from DB prefs into adapters (overrides .env defaults)
+  const ncmApi = getPref(db, 'ncm_api');
+  if (ncmApi) setNcmBase(ncmApi);
+  const weatherKey = getPref(db, 'weather_key');
+  if (weatherKey) setWeatherKey(weatherKey);
+  const fishKey = getPref(db, 'fish_key');
+  if (fishKey) setFishKey(fishKey);
+  const feishuAppId = getPref(db, 'feishu_app_id');
+  const feishuAppSecret = getPref(db, 'feishu_app_secret');
+  if (feishuAppId || feishuAppSecret) setFeishuConfig(feishuAppId ?? '', feishuAppSecret ?? '');
+  const upnpRaw = getPref(db, 'upnp_devices');
+  if (upnpRaw) {
+    try { setUpnpDevices(JSON.parse(upnpRaw)); } catch { /* keep env default */ }
+  }
 
   // create app
   const executor = createExecutor();
