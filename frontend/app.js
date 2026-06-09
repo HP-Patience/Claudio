@@ -33,6 +33,7 @@ const dom = {
   connectionStatus: $('#connection-status'),
   ncmStatus: $('#ncm-status'),
   queueCount: $('#queue-count'),
+  favsCount: $('#favs-count'),
   tokenUsage: $('#token-usage'),
   themeToggle: $('#theme-toggle'),
   settingsToggle: $('#settings-toggle'),
@@ -46,6 +47,9 @@ const dom = {
   settingsKeyEye: $('#settings-key-eye'),
   loveBtn: $('#love-btn'),
   hideBtn: $('#hide-btn'),
+  queuePanel: $('#queue-panel'),
+  favsPanel: $('#favs-panel'),
+  chatPanel: $('#chat-panel'),
 };
 
 // ── audio ──
@@ -166,6 +170,186 @@ dom.hideBtn.addEventListener('click', async () => {
   }
 });
 
+// ── tab switching ──
+let activePanel = 'chat';
+document.querySelectorAll('.chat-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.tab;
+    if (activePanel === target) return;
+    activePanel = target;
+    document.querySelectorAll('.chat-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    dom.chatPanel.style.display = target === 'chat' ? '' : 'none';
+    dom.queuePanel.style.display = target === 'queue' ? '' : 'none';
+    dom.favsPanel.style.display = target === 'favs' ? '' : 'none';
+    if (target === 'queue') renderQueuePanel();
+    if (target === 'favs') renderFavsPanel();
+  });
+});
+
+// ── queue panel ──
+function refreshQueuePanel() {
+  if (activePanel === 'queue') renderQueuePanel();
+}
+
+function renderQueuePanel() {
+  dom.queuePanel.innerHTML = '';
+  dom.queueCount.textContent = String(state.queue.length);
+
+  if (state.queue.length === 0) {
+    dom.queuePanel.innerHTML = '<div class="panel-empty">Queue is empty</div>';
+    return;
+  }
+
+  state.queue.forEach((item, idx) => {
+    const el = document.createElement('div');
+    el.className = 'track-item' + (idx === 0 ? ' current' : '');
+
+    const info = document.createElement('div');
+    info.className = 'track-item-info';
+    const name = document.createElement('div');
+    name.className = 'track-item-name';
+    name.textContent = (idx === 0 ? '♪ ' : '') + item.name;
+    const artist = document.createElement('div');
+    artist.className = 'track-item-artist';
+    artist.textContent = item.artist;
+    info.appendChild(name);
+    info.appendChild(artist);
+    el.appendChild(info);
+
+    if (idx > 0) {
+      const playBtn = document.createElement('button');
+      playBtn.className = 'track-action';
+      playBtn.textContent = '▶';
+      playBtn.title = 'Play now';
+      playBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const [moved] = state.queue.splice(idx, 1);
+        state.queue.unshift(moved);
+        playTrack(state.queue[0]);
+        renderQueuePanel();
+      });
+      el.appendChild(playBtn);
+    }
+
+    const rmBtn = document.createElement('button');
+    rmBtn.className = 'track-action';
+    rmBtn.textContent = '×';
+    rmBtn.title = idx === 0 ? 'Stop' : 'Remove';
+    rmBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.queue.splice(idx, 1);
+      dom.queueCount.textContent = String(state.queue.length);
+      if (idx === 0) {
+        if (state.queue.length > 0) {
+          playTrack(state.queue[0]);
+        } else {
+          audio.pause();
+          audio.src = '';
+          state.currentTrack = null;
+          state.isPlaying = false;
+          dom.playBtn.textContent = '▶';
+          dom.onAir.classList.remove('active');
+          dom.nowPlaying.textContent = 'Claudio';
+          dom.waveform.classList.add('paused');
+        }
+      }
+      renderQueuePanel();
+    });
+    el.appendChild(rmBtn);
+
+    dom.queuePanel.appendChild(el);
+  });
+}
+
+// ── favs panel ──
+async function renderFavsPanel() {
+  dom.favsPanel.innerHTML = '<div class="panel-empty">Loading...</div>';
+  try {
+    const res = await fetch('/api/favorites');
+    const data = await res.json();
+    const favs = data.favorites || [];
+    dom.favsCount.textContent = String(favs.length);
+    dom.favsPanel.innerHTML = '';
+
+    if (favs.length === 0) {
+      dom.favsPanel.innerHTML = '<div class="panel-empty">No favorites yet</div>';
+      return;
+    }
+
+    for (const fav of favs) {
+      const el = document.createElement('div');
+      el.className = 'track-item';
+      const info = document.createElement('div');
+      info.className = 'track-item-info';
+      const name = document.createElement('div');
+      name.className = 'track-item-name';
+      name.textContent = fav.song_name;
+      const artist = document.createElement('div');
+      artist.className = 'track-item-artist';
+      artist.textContent = fav.artist;
+      info.appendChild(name);
+      info.appendChild(artist);
+      el.appendChild(info);
+
+      const playBtn = document.createElement('button');
+      playBtn.className = 'track-action';
+      playBtn.textContent = '▶';
+      playBtn.title = 'Play now';
+      playBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        playBtn.textContent = '…';
+        playBtn.disabled = true;
+        try {
+          const r = await fetch('/api/play/by-id', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ songId: fav.song_id }),
+          });
+          const item = await r.json();
+          if (!item.url) {
+            addChatMessage(`无法获取 ${item.name} 的播放链接`, 'system');
+            return;
+          }
+          state.queue.unshift(item);
+          setQueue(state.queue);
+          playTrack(item);
+        } catch (err) {
+          addChatMessage(`播放失败: ${err.message}`, 'system');
+        } finally {
+          playBtn.textContent = '▶';
+          playBtn.disabled = false;
+        }
+      });
+      el.appendChild(playBtn);
+
+      const rmBtn = document.createElement('button');
+      rmBtn.className = 'track-action';
+      rmBtn.textContent = '♥';
+      rmBtn.title = 'Remove favorite';
+      rmBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await fetch('/api/favorites/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ songId: fav.song_id, name: fav.song_name, artist: fav.artist }),
+        });
+        state.lovedSongs.delete(fav.song_id);
+        if (state.currentTrack?.songId === fav.song_id) {
+          dom.loveBtn.textContent = '♡';
+          dom.loveBtn.classList.remove('loved');
+        }
+        renderFavsPanel();
+      });
+      el.appendChild(rmBtn);
+
+      dom.favsPanel.appendChild(el);
+    }
+  } catch {
+    dom.favsPanel.innerHTML = '<div class="panel-empty">Failed to load favorites</div>';
+  }
+}
+
 function togglePlay() {
   if (audio.paused && audio.src) {
     audio.play();
@@ -177,7 +361,8 @@ function togglePlay() {
 function getQueue() { return state.queue; }
 function setQueue(items) {
   state.queue = items;
-  dom.queueCount.textContent = `${items.length} tracks`;
+  dom.queueCount.textContent = String(items.length);
+  refreshQueuePanel();
 }
 
 function nextTrack() {
@@ -185,6 +370,8 @@ function nextTrack() {
     const next = state.queue.shift();
     state.queue.push(next);
     playTrack(state.queue[0]);
+    dom.queueCount.textContent = String(state.queue.length);
+    renderQueuePanel();
   }
 }
 
@@ -193,6 +380,8 @@ function prevTrack() {
     const prev = state.queue.pop();
     state.queue.unshift(prev);
     playTrack(state.queue[0]);
+    dom.queueCount.textContent = String(state.queue.length);
+    renderQueuePanel();
   }
 }
 
@@ -384,6 +573,7 @@ async function loadFavorites() {
     for (const fav of data.favorites || []) {
       state.lovedSongs.add(fav.song_id);
     }
+    dom.favsCount.textContent = String(data.favorites?.length || 0);
   } catch { /* ignore */ }
 }
 

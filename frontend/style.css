@@ -223,6 +223,68 @@ body {
   letter-spacing: .1em; text-transform: uppercase;
   font-family: var(--font-mono);
 }
+
+/* ── Tabs ── */
+.chat-tabs {
+  display: flex; gap: 2px;
+}
+.chat-tab {
+  background: transparent; border: none; color: var(--text-muted);
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em;
+  padding: 3px 10px; border-radius: var(--radius-sm); cursor: pointer;
+  transition: all .15s;
+  text-transform: uppercase;
+}
+.chat-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+.chat-tab.active { color: var(--accent); background: var(--bg-hover); }
+.tab-badge {
+  margin-left: 3px; opacity: 0.5;
+}
+.chat-tab.active .tab-badge { opacity: 1; }
+
+/* ── Panels ── */
+.panel {
+  max-height: 320px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px;
+  scroll-behavior: smooth;
+}
+.panel::-webkit-scrollbar { width: 3px; }
+.panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.panel-empty {
+  color: var(--text-muted); font-size: 12px; text-align: center;
+  padding: 40px 0; font-family: var(--font-mono); letter-spacing: .05em;
+  opacity: 0.5;
+}
+
+/* ── Track items ── */
+.track-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  transition: background .15s;
+}
+.track-item:hover { background: var(--bg-hover); }
+.track-item.current { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.track-item-info { flex: 1; min-width: 0; }
+.track-item-name {
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.track-item.current .track-item-name { color: var(--accent); }
+.track-item-artist {
+  font-size: 11px; color: var(--text-muted); margin-top: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.track-action {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: var(--radius-sm);
+  background: transparent; color: var(--text-muted);
+  font-size: 14px; cursor: pointer; transition: all .15s;
+  flex-shrink: 0;
+}
+.track-action:hover { background: var(--bg-hover); color: var(--text-primary); }
+
 .header-spacer { flex: 1; }
 .token-usage {
   color: var(--text-muted);

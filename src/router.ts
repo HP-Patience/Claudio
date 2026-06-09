@@ -6,6 +6,7 @@ import { invokeClaude } from './claude.js';
 import { assemblePrompt } from './context.js';
 import type { createExecutor } from './executor.js';
 import { broadcast } from './ws.js';
+import { getSongUrl, getSongDetail } from './adapters/netease.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
@@ -160,6 +161,12 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
     res.json({ current: queue[0] ?? null, queue });
   });
 
+  app.get('/api/queue', (_req: Request, res: Response) => {
+    if (!opts.executor) return res.json({ queue: [], current: null });
+    const ps = opts.executor.getPlayState();
+    res.json({ queue: ps.queue, current: ps.currentSong });
+  });
+
   app.get('/api/plan/today', (_req: Request, res: Response) => {
     const plan = opts.db
       ? getPlan(opts.db, new Date().toISOString().slice(0, 10))
@@ -291,6 +298,27 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
 
     addHiddenSong(opts.db, songId, name || '', artist || '');
     res.json({ hidden: true });
+  });
+
+  // ── Direct Play ──
+
+  app.post('/api/play/by-id', async (req: Request, res: Response) => {
+    const { songId } = req.body;
+    if (!songId) return res.status(400).json({ error: 'songId required' });
+
+    try {
+      const [url, detail] = await Promise.all([
+        getSongUrl(Number(songId)),
+        getSongDetail(Number(songId)),
+      ]);
+      if (!detail) return res.status(404).json({ error: 'song not found' });
+
+      const item = { songId: String(detail.id), name: detail.name, artist: detail.artist, url };
+      res.json(item);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown';
+      res.status(502).json({ error: msg });
+    }
   });
 
   return app;

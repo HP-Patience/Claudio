@@ -73,12 +73,18 @@
     <!-- Chat -->
     <section class="chat-section">
       <div class="chat-header">
-        <span>Queue</span>
-        <span id="queue-count">0 tracks</span>
-        <span class="header-spacer"></span>
+        <div class="chat-tabs">
+          <button class="chat-tab active" data-tab="chat">CHAT</button>
+          <button class="chat-tab" data-tab="queue">QUEUE <span id="queue-count" class="tab-badge">0</span></button>
+          <button class="chat-tab" data-tab="favs">FAVS <span id="favs-count" class="tab-badge">0</span></button>
+        </div>
         <span id="token-usage" class="token-usage"></span>
       </div>
-      <div class="chat-messages" id="chat-messages"></div>
+      <div class="panel chat-panel" id="chat-panel">
+        <div class="chat-messages" id="chat-messages"></div>
+      </div>
+      <div class="panel queue-panel" id="queue-panel" style="display:none"></div>
+      <div class="panel favs-panel" id="favs-panel" style="display:none"></div>
     </section>
 
     <!-- Input -->
