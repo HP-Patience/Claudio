@@ -1,6 +1,26 @@
 let BASE = process.env.NCM_API ?? 'http://localhost:3001';
 let COOKIE = '';
 
+// Bitrate levels (br param for /song/url)
+export const QUALITY_LEVELS = {
+  standard: 128000,
+  high: 192000,
+  exhigh: 320000,
+  lossless: 999000,
+} as const;
+
+export type QualityLevel = keyof typeof QUALITY_LEVELS;
+
+let DEFAULT_BR = QUALITY_LEVELS.exhigh; // default to 320k
+
+export function setDefaultBr(br: number): void {
+  DEFAULT_BR = br;
+}
+
+export function getDefaultBr(): number {
+  return DEFAULT_BR;
+}
+
 export function setNcmBase(url: string): void {
   if (url) BASE = url;
 }
@@ -76,9 +96,21 @@ export async function getSongDetail(songId: number): Promise<Song | null> {
   };
 }
 
-export async function getSongUrl(songId: number): Promise<string> {
-  const data = await ncmFetch<any>(`/song/url?id=${songId}`);
+export async function getSongUrl(songId: number, br?: number): Promise<string> {
+  const bitrate = br ?? DEFAULT_BR;
+  const data = await ncmFetch<any>(`/song/url?id=${songId}&br=${bitrate}`);
   return data?.data?.[0]?.url ?? '';
+}
+
+export async function getLoginStatus(): Promise<{ online: boolean; vipType: number; nickname?: string }> {
+  const data = await ncmFetch<any>('/login/status?timestamp=' + Date.now());
+  const acct = data?.data?.account;
+  const profile = data?.data?.profile;
+  return {
+    online: acct?.id != null,
+    vipType: acct?.vipType ?? 0,
+    nickname: profile?.nickname ?? '',
+  };
 }
 
 export async function getLyric(songId: number): Promise<string> {

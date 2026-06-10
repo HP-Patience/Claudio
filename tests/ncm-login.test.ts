@@ -55,15 +55,12 @@ describe('NCM Login UI', { timeout: 15000 }, () => {
   it('opens login modal on click, shows QR tab by default', async () => {
     await openLoginModal();
 
-    // QR tab active by default
     const qrTab = await page.$('.login-tab.active[data-login-tab="qr"]');
     expect(qrTab).not.toBeNull();
 
-    // QR panel visible
     const qrDisplay = await page.$eval('#login-qr-panel', el => (el as HTMLElement).style.display);
     expect(qrDisplay).not.toBe('none');
 
-    // Password panel hidden
     const pwdDisplay = await page.$eval('#login-pwd-panel', el => (el as HTMLElement).style.display);
     expect(pwdDisplay).toBe('none');
 
@@ -106,7 +103,6 @@ describe('NCM Login UI', { timeout: 15000 }, () => {
 
   it('reopens modal and shows placeholder while QR loads', async () => {
     await openLoginModal();
-    // Should show QR placeholder (NCM API not running, will error quickly with 10s backend timeout)
     const qrPlaceholder = await page.$('#qr-placeholder');
     expect(qrPlaceholder).not.toBeNull();
     await closeModalViaX();
@@ -134,7 +130,6 @@ describe('NCM Login UI', { timeout: 15000 }, () => {
     await page.click('.login-tab[data-login-tab="pwd"]');
     await page.waitForTimeout(200);
 
-    // Click login without filling fields
     await page.click('#pwd-login-btn');
     await page.waitForTimeout(300);
 

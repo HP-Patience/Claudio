@@ -550,6 +550,7 @@ body {
 }
 .form-input:focus { border-color: var(--accent); }
 .form-input::placeholder { color: var(--text-muted); }
+select.form-input { appearance: auto; cursor: pointer; }
 
 .form-status {
   font-size: 11px; min-height: 16px;

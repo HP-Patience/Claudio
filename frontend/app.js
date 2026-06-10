@@ -9,6 +9,8 @@ const state = {
   queue: [],
   lovedSongs: new Set(),
   ncmLoggedIn: false,
+  ncmVipType: 0,
+  ncmNickname: '',
   isFmMode: false,
   isSmartMode: false,
 };
@@ -54,6 +56,7 @@ const dom = {
   settingsFetchModels: $('#settings-fetch-models'),
   modelDropdown: $('#model-dropdown'),
   settingsNcmApi: $('#settings-ncm-api'),
+  settingsNcmQuality: $('#settings-ncm-quality'),
   settingsWeatherKey: $('#settings-weather-key'),
   settingsFishKey: $('#settings-fish-key'),
   settingsFeishuAppId: $('#settings-feishu-app-id'),
@@ -961,6 +964,8 @@ async function init() {
     const loginRes = await fetch('/api/ncm/login/status');
     const loginData = await loginRes.json();
     state.ncmLoggedIn = loginData.loggedIn;
+    state.ncmVipType = loginData.vipType || 0;
+    state.ncmNickname = loginData.nickname || '';
     updateLoginBtn();
   } catch { /* ignore */ }
 
@@ -1023,8 +1028,14 @@ let qrKey = null;
 let qrPollTimer = null;
 
 function updateLoginBtn() {
-  dom.ncmLoginBtn.textContent = state.ncmLoggedIn ? 'LOGOUT' : 'LOGIN';
-  dom.ncmLoginBtn.classList.toggle('logged-in', state.ncmLoggedIn);
+  if (state.ncmLoggedIn) {
+    const vip = state.ncmVipType && state.ncmVipType > 0 ? ' ★VIP' : '';
+    dom.ncmLoginBtn.textContent = (state.ncmNickname || 'LOGGED') + vip;
+    dom.ncmLoginBtn.classList.add('logged-in');
+  } else {
+    dom.ncmLoginBtn.textContent = 'LOGIN';
+    dom.ncmLoginBtn.classList.remove('logged-in');
+  }
 }
 
 dom.ncmLoginBtn.addEventListener('click', async () => {
@@ -1034,6 +1045,8 @@ dom.ncmLoginBtn.addEventListener('click', async () => {
       await fetch('/api/ncm/logout', { method: 'POST' });
     } catch { /* ignore */ }
     state.ncmLoggedIn = false;
+    state.ncmVipType = 0;
+    state.ncmNickname = '';
     updateLoginBtn();
     addChatMessage('已退出网易云登录', 'system');
     return;
@@ -1127,6 +1140,12 @@ async function startQrLogin() {
           dom.qrStatus.className = 'login-status success';
           state.ncmLoggedIn = true;
           updateLoginBtn();
+          // Refresh VIP info
+          fetch('/api/ncm/login/status').then(r => r.json()).then(d => {
+            state.ncmVipType = d.vipType || 0;
+            state.ncmNickname = d.nickname || '';
+            updateLoginBtn();
+          }).catch(() => {});
           addChatMessage('✓ 网易云登录成功', 'system');
           setTimeout(closeNcmLogin, 1500);
         } else if (code === 802) {
@@ -1174,6 +1193,12 @@ dom.pwdLoginBtn.addEventListener('click', async () => {
       dom.pwdLoginStatus.className = 'login-status success';
       state.ncmLoggedIn = true;
       updateLoginBtn();
+      // Refresh VIP info
+      fetch('/api/ncm/login/status').then(r => r.json()).then(d => {
+        state.ncmVipType = d.vipType || 0;
+        state.ncmNickname = d.nickname || '';
+        updateLoginBtn();
+      }).catch(() => {});
       addChatMessage('✓ 网易云登录成功', 'system');
       setTimeout(closeNcmLogin, 1500);
     } else {
@@ -1238,6 +1263,7 @@ async function loadConfig() {
     dom.settingsBaseUrl.value = data.baseUrl || 'https://api.anthropic.com';
     dom.settingsApiModel.value = data.apiModel || '';
     dom.settingsNcmApi.value = data.ncmApi || 'http://localhost:3001';
+    dom.settingsNcmQuality.value = data.ncmQuality || '';
     dom.settingsWeatherKey.value = data.weatherKey || '';
     dom.settingsFishKey.value = data.fishKey || '';
     dom.settingsFeishuAppId.value = data.feishuAppId || '';
@@ -1343,6 +1369,7 @@ dom.settingsSave.addEventListener('click', async () => {
         baseUrl: dom.settingsBaseUrl.value,
         apiModel: dom.settingsApiModel.value,
         ncmApi: dom.settingsNcmApi.value,
+        ncmQuality: dom.settingsNcmQuality.value,
         weatherKey: dom.settingsWeatherKey.value,
         fishKey: dom.settingsFishKey.value,
         feishuAppId: dom.settingsFeishuAppId.value,

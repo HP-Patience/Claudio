@@ -106,6 +106,7 @@ export async function invokeClaude(
         const body = JSON.stringify({
           model,
           max_tokens: 1024,
+          reasoning_effort: 'high',
           messages: [{ role: 'user', content: prompt }],
         });
         const u = new URL(`${cleanBase}/v1/chat/completions`);

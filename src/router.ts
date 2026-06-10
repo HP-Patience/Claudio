@@ -10,7 +10,7 @@ import type { createExecutor } from './executor.js';
 import { broadcast } from './ws.js';
 import { handleSkip } from './feedback.js';
 import { cacheCoords } from './triggers.js';
-import { getSongUrl, getSongDetail, setNcmCookie, getNcmCookie, clearNcmCookie, getNcmBase } from './adapters/netease.js';
+import { getSongUrl, getSongDetail, setNcmCookie, getNcmCookie, clearNcmCookie, getNcmBase, getLoginStatus, setDefaultBr, QUALITY_LEVELS } from './adapters/netease.js';
 import { getCurrentWeatherByCoords, setWeatherKey, hasWeatherKey } from './adapters/weather.js';
 import { setNcmBase } from './adapters/netease.js';
 import { setFeishuConfig } from './adapters/feishu.js';
@@ -24,6 +24,7 @@ const ENV_PATH = path.resolve('.env');
 
 const ENV_KEY_MAP: Record<string, string> = {
   ncmApi: 'NCM_API',
+  ncmQuality: 'NCM_QUALITY',
   weatherKey: 'SENIVERSE_API_KEY',
   fishKey: 'FISH_AUDIO_API_KEY',
   feishuAppId: 'FEISHU_APP_ID',
@@ -341,12 +342,13 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     const upnpDevices = env.UPNP_DEVICES || getPref(opts.db, 'upnp_devices') || '[]';
     const userCorpusDir = env.USER_CORPUS_DIR || getPref(opts.db, 'user_corpus_dir') || '';
     const ncmLoggedIn = !!getNcmCookie();
-    res.json({ apiKey, baseUrl, apiModel, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir, ncmLoggedIn });
+    const ncmQuality = env.NCM_QUALITY || getPref(opts.db, 'ncm_quality') || '';
+    res.json({ apiKey, baseUrl, apiModel, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir, ncmLoggedIn, ncmQuality });
   });
 
   app.post('/api/config', (req: Request, res: Response) => {
     if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
-    const { apiKey, baseUrl, apiModel, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir } = req.body;
+    const { apiKey, baseUrl, apiModel, ncmApi, ncmQuality, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir } = req.body;
     // Secrets: skip empty or masked values to avoid overwriting with placeholder
     if (apiKey !== undefined && apiKey !== '' && !apiKey.includes('*')) {
       setPref(opts.db, 'api_key', apiKey);
@@ -364,11 +366,16 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     if (baseUrl !== undefined) setPref(opts.db, 'api_base_url', baseUrl);
     if (apiModel !== undefined) setPref(opts.db, 'api_model', apiModel);
     if (ncmApi !== undefined) setPref(opts.db, 'ncm_api', ncmApi);
+    if (ncmQuality !== undefined) {
+      setPref(opts.db, 'ncm_quality', ncmQuality);
+      const br = ncmQuality && QUALITY_LEVELS[ncmQuality as keyof typeof QUALITY_LEVELS];
+      if (br) setDefaultBr(br);
+    }
     if (feishuAppId !== undefined) setPref(opts.db, 'feishu_app_id', feishuAppId);
     if (upnpDevices !== undefined) setPref(opts.db, 'upnp_devices', upnpDevices);
     if (userCorpusDir !== undefined) setPref(opts.db, 'user_corpus_dir', userCorpusDir);
 
-    syncEnvFile({ ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir });
+    syncEnvFile({ ncmApi, ncmQuality, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir });
 
     // Apply config to adapters immediately (no restart needed)
     if (weatherKey !== undefined) setWeatherKey(weatherKey);
@@ -546,26 +553,37 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     res.json({ ok: true });
   });
 
-  app.get('/api/ncm/login/status', (_req: Request, res: Response) => {
-    const cookie = getNcmCookie();
-    res.json({ loggedIn: !!cookie });
+  app.get('/api/ncm/login/status', async (_req: Request, res: Response) => {
+    const loggedIn = !!getNcmCookie();
+    let vipType = 0;
+    let nickname = '';
+    if (loggedIn) {
+      try {
+        const info = await getLoginStatus();
+        vipType = info.vipType;
+        nickname = info.nickname;
+      } catch { /* network call best-effort */ }
+    }
+    res.json({ loggedIn, vipType, nickname });
   });
 
   app.get('/api/status/ncm', async (_req: Request, res: Response) => {
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 3000);
-      const r = await fetch(`${NCM_API_BASE}/search?keywords=test&limit=1`, {
-        signal: ctrl.signal,
-      });
-      clearTimeout(timer);
-      if (r.ok) {
-        res.json({ online: true });
-      } else {
-        res.json({ online: false, reason: `HTTP ${r.status}` });
-      }
+      const [status, loginInfo] = await Promise.all([
+        (async () => {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 3000);
+          const r = await fetch(`${NCM_API_BASE}/search?keywords=test&limit=1`, {
+            signal: ctrl.signal,
+          });
+          clearTimeout(timer);
+          return r.ok ? { online: true } : { online: false, reason: `HTTP ${r.status}` };
+        })(),
+        getLoginStatus().catch(() => ({ online: false, vipType: 0 })),
+      ]);
+      res.json({ ...status, vipType: loginInfo.vipType, nickname: loginInfo.nickname });
     } catch {
-      res.json({ online: false, reason: 'unreachable' });
+      res.json({ online: false, reason: 'unreachable', vipType: 0 });
     }
   });
 

@@ -5,7 +5,7 @@ import { initDb, getPref } from './db.js';
 import { createApp } from './router.js';
 import { createWss } from './ws.js';
 import { createExecutor } from './executor.js';
-import { setNcmBase, setNcmCookie } from './adapters/netease.js';
+import { setNcmBase, setNcmCookie, setDefaultBr, QUALITY_LEVELS } from './adapters/netease.js';
 import { setWeatherKey } from './adapters/weather.js';
 import { setFeishuConfig } from './adapters/feishu.js';
 import { setUpnpDevices } from './adapters/upnp.js';
@@ -49,6 +49,12 @@ export async function start(options: StartOptions = {}) {
   // Load NCM cookie for authenticated requests
   const ncmCookie = getPref(db, 'ncm_cookie');
   if (ncmCookie) setNcmCookie(ncmCookie);
+
+  // Apply default audio quality
+  const ncmQuality = getPref(db, 'ncm_quality');
+  if (ncmQuality && QUALITY_LEVELS[ncmQuality as keyof typeof QUALITY_LEVELS]) {
+    setDefaultBr(QUALITY_LEVELS[ncmQuality as keyof typeof QUALITY_LEVELS]);
+  }
 
   // create app
   const executor = createExecutor();
