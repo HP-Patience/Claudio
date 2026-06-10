@@ -13,6 +13,8 @@ const state = {
   ncmNickname: '',
   isFmMode: false,
   isSmartMode: false,
+  _playlists: [],           // cached playlist list for dropdown
+  _addedToPlaylist: new Set(), // "${pid}-${songId}" pairs to suppress dup toasts
 };
 
 // ── 工具 ──
@@ -1018,6 +1020,9 @@ function renderReportContent(data) {
 let _expandedPlaylistId = null;
 
 async function renderPlaylistsPanel() {
+  // Invalidate +LIST cache so next dropdown shows fresh data
+  state._playlists = [];
+
   dom.playlistsPanel.innerHTML = '';
 
   // Create button bar
@@ -1079,7 +1084,7 @@ async function renderPlaylistsPanel() {
       info.appendChild(meta);
       card.appendChild(info);
 
-      card.addEventListener('click', () => togglePlaylistDetail(pl.id));
+      card.addEventListener('click', () => showPlaylistDetail(pl.id));
       dom.playlistsPanel.appendChild(card);
     }
   } catch {
@@ -1087,33 +1092,57 @@ async function renderPlaylistsPanel() {
   }
 }
 
-async function togglePlaylistDetail(pid) {
-  const existing = document.getElementById(`pl-tracks-${pid}`);
-  if (existing) {
-    existing.remove();
-    return;
-  }
-  await renderPlaylistDetail(pid);
-}
+async function showPlaylistDetail(pid) {
+  dom.playlistsPanel.innerHTML = '';
 
-async function renderPlaylistDetail(pid) {
-  const card = dom.playlistsPanel.querySelector(`.playlist-card[data-pid="${pid}"]`);
-  if (!card) return;
+  // Back bar
+  const bar = document.createElement('div');
+  bar.className = 'playlist-detail-bar';
+  const backBtn = document.createElement('button');
+  backBtn.className = 'playlist-back-btn';
+  backBtn.textContent = '← 歌单';
+  backBtn.addEventListener('click', renderPlaylistsPanel);
+  bar.appendChild(backBtn);
+  dom.playlistsPanel.appendChild(bar);
 
   const container = document.createElement('div');
   container.id = `pl-tracks-${pid}`;
   container.className = 'playlist-tracks';
-  container.innerHTML = '<div class="panel-empty" style="padding:12px">加载中...</div>';
-  card.after(container);
+  container.innerHTML = '<div class="panel-empty" style="padding:24px">加载中...</div>';
+  dom.playlistsPanel.appendChild(container);
 
   try {
     const res = await fetch(`/api/ncm/playlist/${pid}`);
-    if (!res.ok) { container.innerHTML = '<div class="panel-empty" style="padding:12px">获取失败</div>'; return; }
+    if (!res.ok) { container.innerHTML = '<div class="panel-empty" style="padding:24px">获取失败</div>'; return; }
     const data = await res.json();
     const tracks = data.tracks || [];
+    const pl = data.playlist || {};
+
+    // Playlist header
+    const header = document.createElement('div');
+    header.className = 'playlist-detail-header';
+    if (pl.coverImgUrl) {
+      const img = document.createElement('img');
+      img.className = 'playlist-detail-cover';
+      img.src = pl.coverImgUrl + '?param=256y256';
+      img.alt = '';
+      header.appendChild(img);
+    }
+    const headerInfo = document.createElement('div');
+    headerInfo.className = 'playlist-detail-info';
+    const hName = document.createElement('div');
+    hName.className = 'playlist-detail-name';
+    hName.textContent = pl.name;
+    const hMeta = document.createElement('div');
+    hMeta.className = 'playlist-detail-meta';
+    hMeta.textContent = `${pl.trackCount} 首`;
+    headerInfo.appendChild(hName);
+    headerInfo.appendChild(hMeta);
+    header.appendChild(headerInfo);
+    container.before(header);
 
     if (tracks.length === 0) {
-      container.innerHTML = '<div class="panel-empty" style="padding:12px">歌单为空</div>';
+      container.innerHTML = '<div class="panel-empty" style="padding:24px">歌单为空</div>';
       return;
     }
 
@@ -1176,11 +1205,11 @@ async function renderPlaylistDetail(pid) {
           if (!r.ok) { showModeToast('删除失败'); return; }
           showModeToast('已删除');
           el.remove();
-          // Update track count in card
-          const meta = card.querySelector('.playlist-card-meta');
-          if (meta) {
-            const match = meta.textContent.match(/(\d+)/);
-            if (match) meta.textContent = `${parseInt(match[1]) - 1} 首`;
+          // Update track count in header
+          const hMeta = dom.playlistsPanel.querySelector('.playlist-detail-meta');
+          if (hMeta) {
+            const match = hMeta.textContent.match(/(\d+)/);
+            if (match) hMeta.textContent = `${parseInt(match[1]) - 1} 首`;
           }
         } catch { showModeToast('删除失败'); }
       });
@@ -1215,38 +1244,55 @@ dom.addToPlaylistBtn.addEventListener('click', async (e) => {
   dropdown.innerHTML = '<div class="add-to-playlist-empty">加载中...</div>';
   dropdown.style.display = '';
 
-  try {
-    const res = await fetch('/api/ncm/playlists');
-    if (!res.ok) { dropdown.innerHTML = '<div class="add-to-playlist-empty">获取失败</div>'; return; }
-    const data = await res.json();
-    const playlists = data.playlists || [];
-
-    if (playlists.length === 0) {
-      dropdown.innerHTML = '<div class="add-to-playlist-empty">暂无歌单</div>';
+  // Use cached playlists or fetch fresh
+  if (state._playlists.length === 0) {
+    try {
+      const res = await fetch('/api/ncm/playlists');
+      if (!res.ok) { dropdown.innerHTML = '<div class="add-to-playlist-empty">获取失败</div>'; return; }
+      const data = await res.json();
+      state._playlists = data.playlists || [];
+    } catch {
+      dropdown.innerHTML = '<div class="add-to-playlist-empty">加载失败</div>';
       return;
     }
+  }
 
-    dropdown.innerHTML = '';
-    for (const pl of playlists) {
-      const item = document.createElement('div');
-      item.className = 'add-to-playlist-item';
-      item.textContent = `${pl.name} (${pl.trackCount})`;
-      item.addEventListener('click', async () => {
-        try {
-          const r = await fetch(`/api/ncm/playlist/${pl.id}/tracks`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trackIds: [Number(track.songId)] }),
-          });
-          if (!r.ok) { showModeToast('添加失败'); return; }
-          showModeToast(`已添加到「${pl.name}」`);
-        } catch { showModeToast('添加失败'); }
+  if (state._playlists.length === 0) {
+    dropdown.innerHTML = '<div class="add-to-playlist-empty">暂无歌单</div>';
+    return;
+  }
+
+  dropdown.innerHTML = '';
+  for (const pl of state._playlists) {
+    const item = document.createElement('div');
+    item.className = 'add-to-playlist-item';
+    item.textContent = `${pl.name} (${pl.trackCount})`;
+    item.addEventListener('click', async () => {
+      const addedKey = `${pl.id}-${track.songId}`;
+      if (state._addedToPlaylist.has(addedKey)) {
+        showModeToast('已在歌单中');
         dropdown.style.display = 'none';
-      });
-      dropdown.appendChild(item);
-    }
-  } catch {
-    dropdown.innerHTML = '<div class="add-to-playlist-empty">加载失败</div>';
+        return;
+      }
+      try {
+        const r = await fetch(`/api/ncm/playlist/${pl.id}/tracks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trackIds: [Number(track.songId)] }),
+        });
+        if (!r.ok) { showModeToast('添加失败'); return; }
+        const data = await r.json();
+        state._addedToPlaylist.add(addedKey);
+        if (data.alreadyExists) {
+          showModeToast('已在歌单中');
+        } else {
+          showModeToast(`已添加到「${pl.name}」`);
+          pl.trackCount++;
+        }
+      } catch { showModeToast('添加失败'); }
+      dropdown.style.display = 'none';
+    });
+    dropdown.appendChild(item);
   }
 });
 

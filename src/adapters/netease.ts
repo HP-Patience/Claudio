@@ -48,6 +48,23 @@ export interface Song {
   album: string;
 }
 
+export interface Playlist {
+  id: number;
+  name: string;
+  description: string;
+  trackCount: number;
+  coverImgUrl: string;
+  creator: { nickname: string };
+}
+
+export interface PlaylistTrack {
+  id: number;
+  name: string;
+  artist: string;
+  album: string;
+  duration: number;
+}
+
 async function ncmFetch<T>(path: string, retries = 2): Promise<T> {
   for (let i = 0; i <= retries; i++) {
     try {
@@ -102,7 +119,7 @@ export async function getSongUrl(songId: number, br?: number): Promise<string> {
   return data?.data?.[0]?.url ?? '';
 }
 
-export async function getLoginStatus(): Promise<{ online: boolean; vipType: number; nickname?: string }> {
+export async function getLoginStatus(): Promise<{ online: boolean; vipType: number; nickname?: string; userId?: number }> {
   const data = await ncmFetch<any>('/login/status?timestamp=' + Date.now());
   const acct = data?.data?.account;
   const profile = data?.data?.profile;
@@ -110,6 +127,7 @@ export async function getLoginStatus(): Promise<{ online: boolean; vipType: numb
     online: acct?.id != null,
     vipType: acct?.vipType ?? 0,
     nickname: profile?.nickname ?? '',
+    userId: profile?.userId,
   };
 }
 
@@ -161,4 +179,63 @@ export async function getIntelligenceList(songId: number, playlistId: number): P
     artist: s.ar?.[0]?.name ?? '',
     album: s.al?.name ?? '',
   }));
+}
+
+// ── Playlist API ──
+
+export async function getUserPlaylists(userId: number): Promise<Playlist[]> {
+  const data = await ncmFetch<any>(`/user/playlist?uid=${userId}`);
+  const playlists = data?.playlist ?? [];
+  return playlists.map((p: any) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description ?? '',
+    trackCount: p.trackCount ?? 0,
+    coverImgUrl: p.coverImgUrl ?? '',
+    creator: { nickname: p.creator?.nickname ?? '' },
+  }));
+}
+
+export async function getPlaylistDetail(playlistId: number): Promise<{ playlist: Playlist; tracks: PlaylistTrack[] }> {
+  const data = await ncmFetch<any>(`/playlist/detail?id=${playlistId}`);
+  const p = data?.playlist ?? {};
+  const rawTracks = p.tracks ?? [];
+  return {
+    playlist: {
+      id: p.id,
+      name: p.name,
+      description: p.description ?? '',
+      trackCount: p.trackCount ?? 0,
+      coverImgUrl: p.coverImgUrl ?? '',
+      creator: { nickname: p.creator?.nickname ?? '' },
+    },
+    tracks: rawTracks.map((t: any) => ({
+      id: t.id,
+      name: t.name,
+      artist: t.ar?.map((a: any) => a.name).join(' / ') ?? '',
+      album: t.al?.name ?? '',
+      duration: t.dt ?? 0,
+    })),
+  };
+}
+
+export async function createPlaylist(name: string, privacy = false): Promise<Playlist> {
+  const data = await ncmFetch<any>(`/playlist/create?name=${encodeURIComponent(name)}&privacy=${privacy ? 10 : 0}`);
+  const p = data?.playlist ?? {};
+  return {
+    id: p.id,
+    name: p.name,
+    description: p.description ?? '',
+    trackCount: p.trackCount ?? 0,
+    coverImgUrl: p.coverImgUrl ?? '',
+    creator: { nickname: p.creator?.nickname ?? '' },
+  };
+}
+
+export async function addTracksToPlaylist(playlistId: number, trackIds: number[]): Promise<void> {
+  await ncmFetch<any>(`/playlist/tracks?op=add&pid=${playlistId}&tracks=${trackIds.join(',')}`);
+}
+
+export async function removeTracksFromPlaylist(playlistId: number, trackIds: number[]): Promise<void> {
+  await ncmFetch<any>(`/playlist/tracks?op=del&pid=${playlistId}&tracks=${trackIds.join(',')}`);
 }

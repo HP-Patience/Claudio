@@ -638,8 +638,17 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     const { trackIds } = req.body;
     if (!Array.isArray(trackIds) || trackIds.length === 0) return res.status(400).json({ error: 'trackIds array required' });
     try {
-      await addTracksToPlaylist(pid, trackIds);
-      res.json({ ok: true });
+      // Check which tracks already exist in the playlist
+      const detail = await getPlaylistDetail(pid);
+      const existingIds = new Set(detail.tracks.map(t => t.id));
+      const newIds = trackIds.filter((id: number) => !existingIds.has(id));
+
+      if (newIds.length === 0) {
+        res.json({ ok: true, alreadyExists: true });
+        return;
+      }
+      await addTracksToPlaylist(pid, newIds);
+      res.json({ ok: true, alreadyExists: false });
     } catch (err) {
       res.status(502).json({ error: (err as Error).message });
     }
