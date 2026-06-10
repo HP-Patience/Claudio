@@ -3,6 +3,10 @@ let API_KEY = process.env.OPENWEATHER_API_KEY ?? '';
 export function setWeatherKey(key: string): void {
   if (key) API_KEY = key;
 }
+
+export function hasWeatherKey(): boolean {
+  return !!API_KEY;
+}
 const BASE = 'https://api.openweathermap.org/data/2.5';
 
 export interface WeatherData {
@@ -28,6 +32,7 @@ export async function getCurrentWeather(city: string): Promise<WeatherData> {
 }
 
 export async function getCurrentWeatherByCoords(lat: number, lon: number): Promise<WeatherData> {
+  if (!API_KEY) throw new Error('OpenWeather API key not configured');
   const url = `${BASE}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=zh_cn`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Weather API error: ${res.status}`);
