@@ -107,6 +107,7 @@ export async function invokeClaude(
           model,
           max_tokens: 1024,
           reasoning_effort: 'high',
+          thinking: { type: 'disabled' },
           messages: [{ role: 'user', content: prompt }],
         });
         const u = new URL(`${cleanBase}/v1/chat/completions`);
