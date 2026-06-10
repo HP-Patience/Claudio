@@ -66,6 +66,10 @@
           <button class="ctrl-btn" id="love-btn" title="收藏">♡</button>
           <button class="ctrl-btn text" id="hide-btn" title="隐藏">HIDE</button>
           <button class="ctrl-btn text" id="similar-btn" title="相似推荐">相似</button>
+          <div class="add-to-playlist-wrap">
+            <button class="ctrl-btn text" id="add-to-playlist-btn" title="添加到歌单">+LIST</button>
+            <div class="add-to-playlist-dropdown" id="add-to-playlist-dropdown" style="display:none"></div>
+          </div>
           <input type="range" id="volume" min="0" max="100" value="80" title="音量" />
         </div>
       </div>
@@ -89,6 +93,7 @@
           <button class="chat-tab" data-tab="queue">QUEUE <span id="queue-count" class="tab-badge">0</span></button>
           <button class="chat-tab" data-tab="favs">FAVS <span id="favs-count" class="tab-badge">0</span></button>
           <button class="chat-tab" data-tab="stats">STATS</button>
+          <button class="chat-tab" data-tab="playlists">PLAYLISTS</button>
         </div>
         <span id="token-usage" class="token-usage"></span>
       </div>
@@ -98,6 +103,7 @@
       <div class="panel queue-panel" id="queue-panel" style="display:none"></div>
       <div class="panel favs-panel" id="favs-panel" style="display:none"></div>
       <div class="panel stats-panel" id="stats-panel" style="display:none"></div>
+      <div class="panel playlists-panel" id="playlists-panel" style="display:none"></div>
     </section>
 
     <!-- Input -->
@@ -247,9 +253,48 @@
             <label class="form-label">密码</label>
             <input type="password" id="login-password" class="form-input" placeholder="密码" autocomplete="off" />
           </div>
+          <!-- Captcha section (hidden until 462) -->
+          <div id="login-captcha-section" style="display:none">
+            <div class="form-group">
+              <label class="form-label">短信验证码</label>
+              <div style="display:flex;gap:8px">
+                <input type="text" id="login-captcha" class="form-input" placeholder="验证码" autocomplete="off" style="flex:1" />
+                <button class="modal-btn" id="login-send-captcha-btn" style="white-space:nowrap;flex-shrink:0">发送验证码</button>
+              </div>
+            </div>
+            <div class="login-status" id="pwd-captcha-status"></div>
+          </div>
           <div class="login-status" id="pwd-login-status"></div>
           <button class="modal-btn primary" id="pwd-login-btn" style="width:100%;margin-top:8px">登录</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Playlist Modal -->
+  <div class="modal-overlay" id="playlist-create-modal">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <span class="modal-title">创建歌单</span>
+        <button class="modal-close" id="playlist-create-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="playlist-name">歌单名称</label>
+          <input type="text" id="playlist-name" class="form-input" placeholder="输入歌单名称..." autocomplete="off" />
+        </div>
+        <div class="form-group playlist-privacy">
+          <label class="form-label">隐私设置</label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="playlist-private" />
+            <span>私密歌单</span>
+          </label>
+        </div>
+        <div class="form-status" id="playlist-create-status"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn secondary" id="playlist-create-cancel">取消</button>
+        <button class="modal-btn primary" id="playlist-create-confirm">创建</button>
       </div>
     </div>
   </div>

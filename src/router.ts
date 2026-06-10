@@ -10,7 +10,7 @@ import type { createExecutor } from './executor.js';
 import { broadcast } from './ws.js';
 import { handleSkip } from './feedback.js';
 import { cacheCoords } from './triggers.js';
-import { getSongUrl, getSongDetail, getSimilarSongs, setNcmCookie, getNcmCookie, clearNcmCookie, getNcmBase, getLoginStatus, setDefaultBr, QUALITY_LEVELS } from './adapters/netease.js';
+import { getSongUrl, getSongDetail, getSimilarSongs, setNcmCookie, getNcmCookie, clearNcmCookie, getNcmBase, getLoginStatus, setDefaultBr, QUALITY_LEVELS, getUserPlaylists, getPlaylistDetail, createPlaylist, addTracksToPlaylist, removeTracksFromPlaylist } from './adapters/netease.js';
 import { getCurrentWeatherByCoords, setWeatherKey, hasWeatherKey } from './adapters/weather.js';
 import { setNcmBase } from './adapters/netease.js';
 import { setFeishuConfig } from './adapters/feishu.js';
@@ -530,11 +530,17 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
 
   app.post('/api/ncm/login/cellphone', async (req: Request, res: Response) => {
     try {
-      const { phone, password } = req.body;
-      if (!phone || !password) return res.status(400).json({ error: 'phone and password required' });
-      const { body, cookie } = await ncmProxyGet(
-        `/login/cellphone?phone=${encodeURIComponent(phone)}&password=${encodeURIComponent(password)}&timestamp=${Date.now()}`
-      );
+      const { phone, password, captcha } = req.body;
+      if (!phone) return res.status(400).json({ error: 'phone required' });
+      // captcha replaces password per API doc: when captcha provided, password ignored
+      let path = `/login/cellphone?phone=${encodeURIComponent(phone)}&timestamp=${Date.now()}&randomCNIP=true`;
+      if (captcha) {
+        path += `&captcha=${encodeURIComponent(captcha)}`;
+      } else {
+        if (!password) return res.status(400).json({ error: 'password or captcha required' });
+        path += `&password=${encodeURIComponent(password)}`;
+      }
+      const { body, cookie } = await ncmProxyGet(path);
       if (body.code === 200 && cookie && opts.db) {
         const musicU = extractMusicU(cookie);
         if (musicU) {
@@ -542,6 +548,17 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
           setNcmCookie(musicU);
         }
       }
+      res.json(body);
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/ncm/login/send-captcha', async (req: Request, res: Response) => {
+    try {
+      const { phone } = req.body;
+      if (!phone) return res.status(400).json({ error: 'phone required' });
+      const { body } = await ncmProxyGet(`/captcha/sent?phone=${encodeURIComponent(phone)}&timestamp=${Date.now()}&randomCNIP=true`);
       res.json(body);
     } catch (err) {
       res.status(502).json({ error: (err as Error).message });
@@ -566,6 +583,80 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       } catch { /* network call best-effort */ }
     }
     res.json({ loggedIn, vipType, nickname });
+  });
+
+  // ── Playlist routes ──
+
+  function requireNcmLogin(res: Response): boolean {
+    if (!getNcmCookie()) {
+      res.status(401).json({ error: 'NCM not logged in' });
+      return false;
+    }
+    return true;
+  }
+
+  app.get('/api/ncm/playlists', async (_req: Request, res: Response) => {
+    if (!requireNcmLogin(res)) return;
+    try {
+      const status = await getLoginStatus();
+      if (!status.userId) return res.status(500).json({ error: 'Failed to get user ID' });
+      const playlists = await getUserPlaylists(status.userId);
+      res.json({ playlists });
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get('/api/ncm/playlist/:id', async (req: Request, res: Response) => {
+    if (!requireNcmLogin(res)) return;
+    try {
+      const pid = Number(req.params.id);
+      if (isNaN(pid)) return res.status(400).json({ error: 'Invalid playlist id' });
+      const detail = await getPlaylistDetail(pid);
+      res.json(detail);
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/ncm/playlist/create', async (req: Request, res: Response) => {
+    if (!requireNcmLogin(res)) return;
+    const { name, privacy } = req.body;
+    if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name required' });
+    try {
+      const playlist = await createPlaylist(name, !!privacy);
+      res.json({ playlist });
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/ncm/playlist/:id/tracks', async (req: Request, res: Response) => {
+    if (!requireNcmLogin(res)) return;
+    const pid = Number(req.params.id);
+    if (isNaN(pid)) return res.status(400).json({ error: 'Invalid playlist id' });
+    const { trackIds } = req.body;
+    if (!Array.isArray(trackIds) || trackIds.length === 0) return res.status(400).json({ error: 'trackIds array required' });
+    try {
+      await addTracksToPlaylist(pid, trackIds);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
+
+  app.delete('/api/ncm/playlist/:id/tracks', async (req: Request, res: Response) => {
+    if (!requireNcmLogin(res)) return;
+    const pid = Number(req.params.id);
+    if (isNaN(pid)) return res.status(400).json({ error: 'Invalid playlist id' });
+    const { trackIds } = req.body;
+    if (!Array.isArray(trackIds) || trackIds.length === 0) return res.status(400).json({ error: 'trackIds array required' });
+    try {
+      await removeTracksFromPlaylist(pid, trackIds);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
   });
 
   app.get('/api/status/ncm', async (_req: Request, res: Response) => {

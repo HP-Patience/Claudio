@@ -103,6 +103,16 @@ const dom = {
   loginPassword: $('#login-password'),
   pwdLoginBtn: $('#pwd-login-btn'),
   pwdLoginStatus: $('#pwd-login-status'),
+  playlistsPanel: $('#playlists-panel'),
+  addToPlaylistBtn: $('#add-to-playlist-btn'),
+  addToPlaylistDropdown: $('#add-to-playlist-dropdown'),
+  playlistCreateModal: $('#playlist-create-modal'),
+  playlistCreateClose: $('#playlist-create-close'),
+  playlistCreateCancel: $('#playlist-create-cancel'),
+  playlistCreateConfirm: $('#playlist-create-confirm'),
+  playlistName: $('#playlist-name'),
+  playlistPrivate: $('#playlist-private'),
+  playlistCreateStatus: $('#playlist-create-status'),
 };
 
 // ── audio ──
@@ -299,9 +309,11 @@ document.querySelectorAll('.chat-tab').forEach(tab => {
     dom.queuePanel.style.display = target === 'queue' ? '' : 'none';
     dom.favsPanel.style.display = target === 'favs' ? '' : 'none';
     dom.statsPanel.style.display = target === 'stats' ? '' : 'none';
+    dom.playlistsPanel.style.display = target === 'playlists' ? '' : 'none';
     if (target === 'queue') renderQueuePanel();
     if (target === 'favs') renderFavsPanel();
     if (target === 'stats') renderStatsPanel();
+    if (target === 'playlists') renderPlaylistsPanel();
   });
 });
 
@@ -1001,6 +1013,306 @@ function renderReportContent(data) {
   }
 }
 
+// ── Playlists ──
+
+let _expandedPlaylistId = null;
+
+async function renderPlaylistsPanel() {
+  dom.playlistsPanel.innerHTML = '';
+
+  // Create button bar
+  const bar = document.createElement('div');
+  bar.className = 'playlist-create-bar';
+  const createBtn = document.createElement('button');
+  createBtn.className = 'playlist-create-btn';
+  createBtn.textContent = '+ 创建歌单';
+  createBtn.addEventListener('click', openPlaylistCreateModal);
+  bar.appendChild(createBtn);
+  dom.playlistsPanel.appendChild(bar);
+
+  if (!state.ncmLoggedIn) {
+    const empty = document.createElement('div');
+    empty.className = 'panel-empty';
+    empty.textContent = '请先登录网易云';
+    dom.playlistsPanel.appendChild(empty);
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/ncm/playlists');
+    if (!res.ok) { dom.playlistsPanel.innerHTML = '<div class="panel-empty">获取歌单失败</div>'; return; }
+    const data = await res.json();
+    const playlists = data.playlists || [];
+
+    if (playlists.length === 0) {
+      dom.playlistsPanel.innerHTML += '<div class="panel-empty">暂无歌单</div>';
+      return;
+    }
+
+    for (const pl of playlists) {
+      const card = document.createElement('div');
+      card.className = 'playlist-card';
+      card.dataset.pid = pl.id;
+
+      if (pl.coverImgUrl) {
+        const img = document.createElement('img');
+        img.className = 'playlist-card-cover';
+        img.src = pl.coverImgUrl + '?param=88y88';
+        img.alt = '';
+        card.appendChild(img);
+      } else {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'playlist-card-cover-placeholder';
+        placeholder.textContent = '♫';
+        card.appendChild(placeholder);
+      }
+
+      const info = document.createElement('div');
+      info.className = 'playlist-card-info';
+      const name = document.createElement('div');
+      name.className = 'playlist-card-name';
+      name.textContent = pl.name;
+      const meta = document.createElement('div');
+      meta.className = 'playlist-card-meta';
+      meta.textContent = `${pl.trackCount} 首`;
+      info.appendChild(name);
+      info.appendChild(meta);
+      card.appendChild(info);
+
+      card.addEventListener('click', () => togglePlaylistDetail(pl.id));
+      dom.playlistsPanel.appendChild(card);
+    }
+  } catch {
+    dom.playlistsPanel.innerHTML = '<div class="panel-empty">加载失败</div>';
+  }
+}
+
+async function togglePlaylistDetail(pid) {
+  const existing = document.getElementById(`pl-tracks-${pid}`);
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  await renderPlaylistDetail(pid);
+}
+
+async function renderPlaylistDetail(pid) {
+  const card = dom.playlistsPanel.querySelector(`.playlist-card[data-pid="${pid}"]`);
+  if (!card) return;
+
+  const container = document.createElement('div');
+  container.id = `pl-tracks-${pid}`;
+  container.className = 'playlist-tracks';
+  container.innerHTML = '<div class="panel-empty" style="padding:12px">加载中...</div>';
+  card.after(container);
+
+  try {
+    const res = await fetch(`/api/ncm/playlist/${pid}`);
+    if (!res.ok) { container.innerHTML = '<div class="panel-empty" style="padding:12px">获取失败</div>'; return; }
+    const data = await res.json();
+    const tracks = data.tracks || [];
+
+    if (tracks.length === 0) {
+      container.innerHTML = '<div class="panel-empty" style="padding:12px">歌单为空</div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    for (const t of tracks) {
+      const el = document.createElement('div');
+      el.className = 'playlist-track-item';
+
+      const info = document.createElement('div');
+      info.className = 'playlist-track-info';
+      const name = document.createElement('div');
+      name.className = 'playlist-track-name';
+      name.textContent = t.name;
+      const artist = document.createElement('div');
+      artist.className = 'playlist-track-artist';
+      artist.textContent = t.artist;
+      info.appendChild(name);
+      info.appendChild(artist);
+      el.appendChild(info);
+
+      const actions = document.createElement('div');
+      actions.className = 'playlist-track-actions';
+
+      const playBtn = document.createElement('button');
+      playBtn.className = 'playlist-track-btn';
+      playBtn.textContent = '▶';
+      playBtn.title = '播放';
+      playBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        playBtn.textContent = '…';
+        playBtn.disabled = true;
+        try {
+          const r = await fetch('/api/play/by-id', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ songId: t.id }),
+          });
+          const item = await r.json();
+          if (!item.url) { showModeToast('无法获取播放链接'); return; }
+          state.queue.unshift(item);
+          setQueue(state.queue);
+          playTrack(item);
+        } catch { showModeToast('播放失败'); }
+        finally { playBtn.textContent = '▶'; playBtn.disabled = false; }
+      });
+      actions.appendChild(playBtn);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'playlist-track-btn danger';
+      delBtn.textContent = '×';
+      delBtn.title = '从歌单删除';
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          const r = await fetch(`/api/ncm/playlist/${pid}/tracks`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trackIds: [t.id] }),
+          });
+          if (!r.ok) { showModeToast('删除失败'); return; }
+          showModeToast('已删除');
+          el.remove();
+          // Update track count in card
+          const meta = card.querySelector('.playlist-card-meta');
+          if (meta) {
+            const match = meta.textContent.match(/(\d+)/);
+            if (match) meta.textContent = `${parseInt(match[1]) - 1} 首`;
+          }
+        } catch { showModeToast('删除失败'); }
+      });
+      actions.appendChild(delBtn);
+
+      el.appendChild(actions);
+      container.appendChild(el);
+    }
+  } catch {
+    container.innerHTML = '<div class="panel-empty" style="padding:12px">加载失败</div>';
+  }
+}
+
+// ── Add to playlist dropdown ──
+
+dom.addToPlaylistBtn.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  const dropdown = dom.addToPlaylistDropdown;
+  if (dropdown.style.display !== 'none') { dropdown.style.display = 'none'; return; }
+
+  if (!state.ncmLoggedIn) {
+    showModeToast('请先登录网易云');
+    return;
+  }
+
+  const track = state.currentTrack;
+  if (!track || !track.songId) {
+    showModeToast('请先播放一首歌');
+    return;
+  }
+
+  dropdown.innerHTML = '<div class="add-to-playlist-empty">加载中...</div>';
+  dropdown.style.display = '';
+
+  try {
+    const res = await fetch('/api/ncm/playlists');
+    if (!res.ok) { dropdown.innerHTML = '<div class="add-to-playlist-empty">获取失败</div>'; return; }
+    const data = await res.json();
+    const playlists = data.playlists || [];
+
+    if (playlists.length === 0) {
+      dropdown.innerHTML = '<div class="add-to-playlist-empty">暂无歌单</div>';
+      return;
+    }
+
+    dropdown.innerHTML = '';
+    for (const pl of playlists) {
+      const item = document.createElement('div');
+      item.className = 'add-to-playlist-item';
+      item.textContent = `${pl.name} (${pl.trackCount})`;
+      item.addEventListener('click', async () => {
+        try {
+          const r = await fetch(`/api/ncm/playlist/${pl.id}/tracks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trackIds: [Number(track.songId)] }),
+          });
+          if (!r.ok) { showModeToast('添加失败'); return; }
+          showModeToast(`已添加到「${pl.name}」`);
+        } catch { showModeToast('添加失败'); }
+        dropdown.style.display = 'none';
+      });
+      dropdown.appendChild(item);
+    }
+  } catch {
+    dropdown.innerHTML = '<div class="add-to-playlist-empty">加载失败</div>';
+  }
+});
+
+// Close dropdown on outside click
+document.addEventListener('click', (e) => {
+  if (dom.addToPlaylistDropdown && !dom.addToPlaylistBtn.contains(e.target) && !dom.addToPlaylistDropdown.contains(e.target)) {
+    dom.addToPlaylistDropdown.style.display = 'none';
+  }
+});
+
+// ── Create playlist modal ──
+
+function openPlaylistCreateModal() {
+  if (!state.ncmLoggedIn) { showModeToast('请先登录网易云'); return; }
+  dom.playlistName.value = '';
+  dom.playlistPrivate.checked = false;
+  dom.playlistCreateStatus.textContent = '';
+  dom.playlistCreateModal.classList.add('open');
+  dom.playlistName.focus();
+}
+
+function closePlaylistCreateModal() {
+  dom.playlistCreateModal.classList.remove('open');
+}
+
+dom.playlistCreateClose.addEventListener('click', closePlaylistCreateModal);
+dom.playlistCreateCancel.addEventListener('click', closePlaylistCreateModal);
+dom.playlistCreateModal.addEventListener('click', (e) => {
+  if (e.target._mousedown === dom.playlistCreateModal) closePlaylistCreateModal();
+});
+dom.playlistCreateModal.addEventListener('mousedown', (e) => {
+  e.target._mousedown = e.target;
+});
+
+dom.playlistCreateConfirm.addEventListener('click', async () => {
+  const name = dom.playlistName.value.trim();
+  if (!name) { dom.playlistCreateStatus.textContent = '请输入歌单名称'; dom.playlistCreateStatus.className = 'form-status error'; return; }
+
+  dom.playlistCreateConfirm.disabled = true;
+  dom.playlistCreateStatus.textContent = '创建中...';
+  dom.playlistCreateStatus.className = 'form-status';
+
+  try {
+    const res = await fetch('/api/ncm/playlist/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, privacy: dom.playlistPrivate.checked }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.playlist) {
+      throw new Error(data.error || '创建失败');
+    }
+    dom.playlistCreateStatus.textContent = `✓ 已创建「${data.playlist.name}」`;
+    dom.playlistCreateStatus.className = 'form-status success';
+    setTimeout(() => {
+      closePlaylistCreateModal();
+      renderPlaylistsPanel();
+    }, 1000);
+  } catch (err) {
+    dom.playlistCreateStatus.textContent = `✗ ${err.message}`;
+    dom.playlistCreateStatus.className = 'form-status error';
+  } finally {
+    dom.playlistCreateConfirm.disabled = false;
+  }
+});
+
 async function init() {
   // Check NCM login status on startup
   try {
@@ -1221,14 +1533,18 @@ dom.pwdLoginBtn.addEventListener('click', async () => {
     dom.pwdLoginStatus.className = 'login-status error';
     return;
   }
+  const captchaEl = document.getElementById('login-captcha');
+  const captcha = captchaEl ? captchaEl.value.trim() : '';
   dom.pwdLoginStatus.textContent = '登录中...';
   dom.pwdLoginStatus.className = 'login-status';
   dom.pwdLoginBtn.disabled = true;
   try {
+    const body = { phone, password };
+    if (captcha) body.captcha = captcha;
     const res = await fetch('/api/ncm/login/cellphone', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, password }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (data.code === 200) {
@@ -1236,7 +1552,6 @@ dom.pwdLoginBtn.addEventListener('click', async () => {
       dom.pwdLoginStatus.className = 'login-status success';
       state.ncmLoggedIn = true;
       updateLoginBtn();
-      // Refresh VIP info
       fetch('/api/ncm/login/status').then(r => r.json()).then(d => {
         state.ncmVipType = d.vipType || 0;
         state.ncmNickname = d.nickname || '';
@@ -1244,6 +1559,11 @@ dom.pwdLoginBtn.addEventListener('click', async () => {
       }).catch(() => {});
       addChatMessage('✓ 网易云登录成功', 'system');
       setTimeout(closeNcmLogin, 1500);
+    } else if (data.code === 462 || data.code === 8821) {
+      const captchaSection = document.getElementById('login-captcha-section');
+      if (captchaSection) captchaSection.style.display = '';
+      dom.pwdLoginStatus.textContent = data.message || '需短信验证码验证';
+      dom.pwdLoginStatus.className = 'login-status error';
     } else {
       dom.pwdLoginStatus.textContent = `登录失败: ${data.message || '请检查账号密码'}`;
       dom.pwdLoginStatus.className = 'login-status error';
@@ -1253,6 +1573,48 @@ dom.pwdLoginBtn.addEventListener('click', async () => {
     dom.pwdLoginStatus.className = 'login-status error';
   } finally {
     dom.pwdLoginBtn.disabled = false;
+  }
+});
+
+// Send captcha
+let captchaCooldown = 0;
+document.getElementById('login-send-captcha-btn')?.addEventListener('click', async () => {
+  const phone = dom.loginPhone.value.trim();
+  if (!phone) {
+    const st = document.getElementById('pwd-captcha-status');
+    if (st) { st.textContent = '请先输入手机号'; st.className = 'login-status error'; }
+    return;
+  }
+  if (captchaCooldown > 0) return;
+  const btn = document.getElementById('login-send-captcha-btn');
+  const st = document.getElementById('pwd-captcha-status');
+  if (btn) btn.disabled = true;
+  if (st) { st.textContent = '发送中...'; st.className = 'login-status'; }
+  try {
+    const res = await fetch('/api/ncm/login/send-captcha', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone }),
+    });
+    const data = await res.json();
+    if (data.code === 200) {
+      if (st) { st.textContent = '✓ 验证码已发送'; st.className = 'login-status success'; }
+      captchaCooldown = 60;
+      const tick = () => {
+        if (captchaCooldown <= 0) { if (btn) { btn.textContent = '发送验证码'; btn.disabled = false; } return; }
+        if (btn) btn.textContent = `${captchaCooldown}s`;
+        captchaCooldown--;
+        setTimeout(tick, 1000);
+      };
+      tick();
+    } else {
+      if (st) { st.textContent = `发送失败: ${data.message || '请稍后重试'}`; st.className = 'login-status error'; }
+      if (btn) btn.disabled = false;
+    }
+  } catch (err) {
+    const st = document.getElementById('pwd-captcha-status');
+    if (st) { st.textContent = `发送失败: ${err.message}`; st.className = 'login-status error'; }
+    if (btn) btn.disabled = false;
   }
 });
 
