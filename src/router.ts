@@ -19,6 +19,7 @@ import { setFishKey } from './tts.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
+import http from 'node:http';
 
 const ENV_PATH = path.resolve('.env');
 
@@ -734,6 +735,56 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       const msg = err instanceof Error ? err.message : 'unknown';
       res.status(502).json({ error: msg });
     }
+  });
+
+  // ── Audio Proxy ──
+
+  app.get('/api/proxy/audio', (req: Request, res: Response) => {
+    const urlStr = req.query.url as string;
+    if (!urlStr) return res.status(400).json({ error: 'url required' });
+
+    let targetUrl: URL;
+    try {
+      targetUrl = new URL(urlStr);
+      if (!targetUrl.hostname.endsWith('music.126.net') && !targetUrl.hostname.endsWith('music.163.com')) {
+        return res.status(403).json({ error: 'domain not allowed' });
+      }
+    } catch {
+      return res.status(400).json({ error: 'invalid url' });
+    }
+
+    const mod = targetUrl.protocol === 'https:' ? https : http;
+    const options: http.RequestOptions = {
+      hostname: targetUrl.hostname,
+      port: targetUrl.port || undefined,
+      path: targetUrl.pathname + targetUrl.search,
+      method: 'GET',
+      headers: {
+        'Referer': 'https://music.163.com',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+    };
+
+    if (req.headers.range) {
+      options.headers!['Range'] = req.headers.range as string;
+    }
+
+    const proxyReq = mod.request(options, (proxyRes) => {
+      res.status(proxyRes.statusCode || 200);
+      const forwardHeaders = ['content-type', 'content-length', 'content-range', 'accept-ranges'];
+      for (const key of forwardHeaders) {
+        const val = proxyRes.headers[key];
+        if (val) res.setHeader(key, Array.isArray(val) ? val[0] : val);
+      }
+      proxyRes.pipe(res);
+    });
+
+    proxyReq.on('error', (err) => {
+      console.error('[proxy audio error]', err);
+      if (!res.headersSent) res.status(502).json({ error: err.message });
+    });
+
+    proxyReq.end();
   });
 
   // ── Stats ──

@@ -15,6 +15,19 @@ const state = {
   isSmartMode: false,
 };
 
+// ── 工具 ──
+
+function resolveAudioUrl(url) {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    if (u.hostname.endsWith('music.126.net') || u.hostname.endsWith('music.163.com')) {
+      return '/api/proxy/audio?url=' + encodeURIComponent(url);
+    }
+  } catch { /* not a valid URL, pass through */ }
+  return url;
+}
+
 let userCoords = null; // { lat, lon } from geolocation
 
 const sessionId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36);
@@ -540,7 +553,7 @@ async function prevTrack() {
 function playTrack(item) {
   if (!item || !item.url) return;
   state.currentTrack = item;
-  audio.src = item.url;
+  audio.src = resolveAudioUrl(item.url);
   audio.play().catch(() => {});
   dom.nowPlaying.textContent = `${item.name} - ${item.artist}`;
   dom.onAir.classList.add('active');
