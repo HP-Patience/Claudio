@@ -11,7 +11,11 @@ import { broadcast } from './ws.js';
 import { handleSkip } from './feedback.js';
 import { cacheCoords } from './triggers.js';
 import { getSongUrl, getSongDetail } from './adapters/netease.js';
-import { getCurrentWeatherByCoords } from './adapters/weather.js';
+import { getCurrentWeatherByCoords, setWeatherKey } from './adapters/weather.js';
+import { setNcmBase } from './adapters/netease.js';
+import { setFeishuConfig } from './adapters/feishu.js';
+import { setUpnpDevices } from './adapters/upnp.js';
+import { setFishKey } from './tts.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
@@ -316,6 +320,16 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
     if (userCorpusDir !== undefined) setPref(opts.db, 'user_corpus_dir', userCorpusDir);
 
     syncEnvFile({ ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir });
+
+    // Apply config to adapters immediately (no restart needed)
+    if (weatherKey !== undefined) setWeatherKey(weatherKey);
+    if (fishKey !== undefined) setFishKey(fishKey);
+    if (ncmApi !== undefined) setNcmBase(ncmApi);
+    if (feishuAppId !== undefined || feishuAppSecret !== undefined) setFeishuConfig(feishuAppId ?? '', feishuAppSecret ?? '');
+    if (upnpDevices !== undefined) {
+      try { setUpnpDevices(JSON.parse(upnpDevices)); } catch { /* keep current */ }
+    }
+
     res.json({ ok: true });
   });
 
