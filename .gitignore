@@ -26,6 +26,7 @@ node_modules/
 
 # Runtime
 state.db
+server.log
 Archive/
 
 # Auto-generated indexes
