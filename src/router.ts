@@ -10,7 +10,7 @@ import type { createExecutor } from './executor.js';
 import { broadcast } from './ws.js';
 import { handleSkip } from './feedback.js';
 import { cacheCoords } from './triggers.js';
-import { getSongUrl, getSongDetail } from './adapters/netease.js';
+import { getSongUrl, getSongDetail, setNcmCookie, getNcmCookie, clearNcmCookie, getNcmBase } from './adapters/netease.js';
 import { getCurrentWeatherByCoords, setWeatherKey, hasWeatherKey } from './adapters/weather.js';
 import { setNcmBase } from './adapters/netease.js';
 import { setFeishuConfig } from './adapters/feishu.js';
@@ -24,7 +24,7 @@ const ENV_PATH = path.resolve('.env');
 
 const ENV_KEY_MAP: Record<string, string> = {
   ncmApi: 'NCM_API',
-  weatherKey: 'OPENWEATHER_API_KEY',
+  weatherKey: 'SENIVERSE_API_KEY',
   fishKey: 'FISH_AUDIO_API_KEY',
   feishuAppId: 'FEISHU_APP_ID',
   feishuAppSecret: 'FEISHU_APP_SECRET',
@@ -69,6 +69,11 @@ function readEnvFile(): Record<string, string> {
     }
   } catch { /* .env not found */ }
   return result;
+}
+
+function extractMusicU(cookie: string): string {
+  const match = cookie.match(/MUSIC_U=([^;]+)/);
+  return match ? match[1] : '';
 }
 
 const NCM_API_BASE = process.env.NCM_API ?? 'http://localhost:3001';
@@ -287,13 +292,14 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
     const apiKey = env.ANTHROPIC_API_KEY || getPref(opts.db, 'api_key') || '';
     const baseUrl = env.ANTHROPIC_BASE_URL || getPref(opts.db, 'api_base_url') || '';
     const ncmApi = env.NCM_API || getPref(opts.db, 'ncm_api') || '';
-    const weatherKey = env.OPENWEATHER_API_KEY || getPref(opts.db, 'weather_key') || '';
+    const weatherKey = env.SENIVERSE_API_KEY || getPref(opts.db, 'weather_key') || '';
     const fishKey = env.FISH_AUDIO_API_KEY || getPref(opts.db, 'fish_key') || '';
     const feishuAppId = env.FEISHU_APP_ID || getPref(opts.db, 'feishu_app_id') || '';
     const feishuAppSecret = env.FEISHU_APP_SECRET || getPref(opts.db, 'feishu_app_secret') || '';
     const upnpDevices = env.UPNP_DEVICES || getPref(opts.db, 'upnp_devices') || '[]';
     const userCorpusDir = env.USER_CORPUS_DIR || getPref(opts.db, 'user_corpus_dir') || '';
-    res.json({ apiKey, baseUrl, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir });
+    const ncmLoggedIn = !!getNcmCookie();
+    res.json({ apiKey, baseUrl, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir, ncmLoggedIn });
   });
 
   app.post('/api/config', (req: Request, res: Response) => {
@@ -387,6 +393,91 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
       const msg = err instanceof Error ? err.message : String(err);
       res.status(502).json({ ok: false, message: `连接失败: ${msg}` });
     }
+  });
+
+  // ── NCM Login ──
+
+  async function ncmProxyGet(path: string): Promise<{ body: any; cookie?: string }> {
+    const url = `${getNcmBase()}${path}`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const body = await r.json();
+    return { body, cookie: body.cookie as string | undefined };
+  }
+
+  app.post('/api/ncm/login/qr/key', async (_req: Request, res: Response) => {
+    try {
+      const { body } = await ncmProxyGet('/login/qr/key?timestamp=' + Date.now());
+      res.json(body);
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/ncm/login/qr/create', async (req: Request, res: Response) => {
+    try {
+      const { key } = req.body;
+      if (!key) return res.status(400).json({ error: 'key required' });
+      const { body } = await ncmProxyGet(`/login/qr/create?key=${encodeURIComponent(key)}&qrimg=true&timestamp=${Date.now()}`);
+      res.json(body);
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/ncm/login/qr/check', async (req: Request, res: Response) => {
+    try {
+      const { key } = req.body;
+      if (!key) return res.status(400).json({ error: 'key required' });
+      const { body, cookie } = await ncmProxyGet(`/login/qr/check?key=${encodeURIComponent(key)}&timestamp=${Date.now()}`);
+      // code 803 = authorized, save cookie
+      if (body.code === 803 && cookie && opts.db) {
+        const musicU = extractMusicU(cookie);
+        if (musicU) {
+          setPref(opts.db, 'ncm_cookie', musicU);
+          setNcmCookie(musicU);
+        }
+      }
+      res.json(body);
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/ncm/login/cellphone', async (req: Request, res: Response) => {
+    try {
+      const { phone, password } = req.body;
+      if (!phone || !password) return res.status(400).json({ error: 'phone and password required' });
+      const { body, cookie } = await ncmProxyGet(
+        `/login/cellphone?phone=${encodeURIComponent(phone)}&password=${encodeURIComponent(password)}&timestamp=${Date.now()}`
+      );
+      if (body.code === 200 && cookie && opts.db) {
+        const musicU = extractMusicU(cookie);
+        if (musicU) {
+          setPref(opts.db, 'ncm_cookie', musicU);
+          setNcmCookie(musicU);
+        }
+      }
+      res.json(body);
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/ncm/logout', (_req: Request, res: Response) => {
+    if (opts.db) setPref(opts.db, 'ncm_cookie', '');
+    clearNcmCookie();
+    res.json({ ok: true });
+  });
+
+  app.get('/api/ncm/login/status', (_req: Request, res: Response) => {
+    const cookie = getNcmCookie();
+    res.json({ loggedIn: !!cookie });
   });
 
   app.get('/api/status/ncm', async (_req: Request, res: Response) => {

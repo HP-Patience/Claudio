@@ -1,7 +1,24 @@
 let BASE = process.env.NCM_API ?? 'http://localhost:3001';
+let COOKIE = '';
 
 export function setNcmBase(url: string): void {
   if (url) BASE = url;
+}
+
+export function setNcmCookie(cookie: string): void {
+  COOKIE = cookie;
+}
+
+export function getNcmCookie(): string {
+  return COOKIE;
+}
+
+export function clearNcmCookie(): void {
+  COOKIE = '';
+}
+
+export function getNcmBase(): string {
+  return BASE;
 }
 
 export interface Song {
@@ -15,9 +32,9 @@ async function ncmFetch<T>(path: string, retries = 2): Promise<T> {
   for (let i = 0; i <= retries; i++) {
     try {
       const url = `${BASE}${path}`;
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-      });
+      const headers: Record<string, string> = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' };
+      if (COOKIE) headers['Cookie'] = `MUSIC_U=${COOKIE}`;
+      const res = await fetch(url, { headers });
       if (!res.ok) {
         console.error(`ncmFetch ${res.status} for ${path} (attempt ${i + 1})`);
         if (i === retries) throw new Error(`NCM API error: ${res.status}`);

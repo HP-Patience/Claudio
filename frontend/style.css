@@ -586,3 +586,40 @@ body {
   background: var(--accent-glow);
 }
 .stats-gen-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Login Modal ── */
+.login-tabs {
+  display: flex; gap: 2px; margin-bottom: 16px;
+}
+.login-tab {
+  flex: 1; padding: 8px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted);
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: .08em; cursor: pointer; text-transform: uppercase;
+  border-radius: var(--radius-sm); transition: all .15s;
+}
+.login-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+.login-tab.active { background: var(--bg-hover); color: var(--accent); border-color: var(--accent); }
+
+.qr-container {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 200px; margin-bottom: 12px;
+}
+.qr-image {
+  width: 180px; height: 180px; border-radius: var(--radius-sm);
+  image-rendering: pixelated;
+}
+.qr-placeholder {
+  color: var(--text-muted); font-size: 13px; font-family: var(--font-mono);
+}
+.login-status {
+  text-align: center; font-size: 12px; color: var(--text-secondary);
+  font-family: var(--font-mono); min-height: 18px;
+}
+.login-status.success { color: var(--green); }
+.login-status.error { color: var(--orange); }
+
+.nav-btn.logged-in {
+  color: var(--green) !important;
+  border-color: var(--green) !important;
+}

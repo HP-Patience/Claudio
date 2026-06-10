@@ -1,4 +1,4 @@
-let API_KEY = process.env.OPENWEATHER_API_KEY ?? '';
+let API_KEY = process.env.SENIVERSE_API_KEY ?? '';
 
 export function setWeatherKey(key: string): void {
   if (key) API_KEY = key;
@@ -7,7 +7,8 @@ export function setWeatherKey(key: string): void {
 export function hasWeatherKey(): boolean {
   return !!API_KEY;
 }
-const BASE = 'https://api.openweathermap.org/data/2.5';
+
+const BASE = 'https://api.seniverse.com/v3/weather/now.json';
 
 export interface WeatherData {
   city: string;
@@ -17,31 +18,34 @@ export interface WeatherData {
   icon: string;
 }
 
+async function seniverseFetch(location: string): Promise<WeatherData> {
+  if (!API_KEY) throw new Error('Seniverse API key not configured');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const url = `${BASE}?key=${API_KEY}&location=${encodeURIComponent(location)}&language=zh-Hans&unit=c`;
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`Seniverse API error: ${res.status}`);
+    const data = await res.json();
+    if (data.status_code) throw new Error(`Seniverse API: ${data.status_detail || 'error'}`);
+    const r = data.results?.[0];
+    if (!r) throw new Error('Seniverse: empty result');
+    return {
+      city: r.location?.name ?? location,
+      temp: Number(r.now?.temperature ?? 0),
+      feelsLike: Number(r.now?.feels_like ?? r.now?.temperature ?? 0),
+      description: r.now?.text ?? '',
+      icon: r.now?.code ? `https://www.seniverse.com/weather/icon/${r.now.code}/64/cloudy.png` : '',
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function getCurrentWeather(city: string): Promise<WeatherData> {
-  const url = `${BASE}/weather?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric&lang=zh_cn`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Weather API error: ${res.status}`);
-  const data = await res.json();
-  return {
-    city: data.name,
-    temp: data.main.temp,
-    feelsLike: data.main.feels_like,
-    description: data.weather[0].description,
-    icon: data.weather[0].icon,
-  };
+  return seniverseFetch(city);
 }
 
 export async function getCurrentWeatherByCoords(lat: number, lon: number): Promise<WeatherData> {
-  if (!API_KEY) throw new Error('OpenWeather API key not configured');
-  const url = `${BASE}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=zh_cn`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Weather API error: ${res.status}`);
-  const data = await res.json();
-  return {
-    city: data.name,
-    temp: data.main.temp,
-    feelsLike: data.main.feels_like,
-    description: data.weather[0].description,
-    icon: data.weather[0].icon,
-  };
+  return seniverseFetch(`${lat}:${lon}`);
 }
