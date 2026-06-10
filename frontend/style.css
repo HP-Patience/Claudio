@@ -492,6 +492,9 @@ body {
 .modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 .modal-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-height: 60vh; overflow-y: auto; }
+.modal-body::-webkit-scrollbar { width: 3px; }
+.modal-body::-webkit-scrollbar-track { background: transparent; }
+.modal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 .form-fieldset {
   border: 1px solid var(--border);
