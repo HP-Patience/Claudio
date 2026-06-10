@@ -185,11 +185,56 @@ body {
   font-size: 10px; letter-spacing: .08em;
   font-family: var(--font-mono);
 }
+#fm-btn {
+  width: auto; padding: 0 6px;
+  font-size: 10px; letter-spacing: 0.1em;
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+#fm-btn:active { color: var(--accent-dim); }
+#smart-btn {
+  width: auto; padding: 0 6px;
+  font-size: 10px; letter-spacing: 0.05em;
+  font-family: var(--font-mono);
+  color: var(--green);
+}
+#smart-btn:active { opacity: 0.6; }
 
 #love-btn.loved { color: #e8456b; }
 #love-btn.loved:hover { color: #ff6b8a; }
 
 #hide-btn:active { color: var(--accent); }
+
+.smart-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--green);
+  border: 1px solid var(--green);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin-left: 8px;
+  opacity: 0.8;
+}
+
+.fm-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin-left: 8px;
+  opacity: 0.8;
+  animation: fm-pulse 2s ease-in-out infinite;
+}
+@keyframes fm-pulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 0.4; }
+}
 
 .player-bottom { margin-top: 10px; }
 .progress-container {
@@ -531,6 +576,31 @@ body {
   color: #fff; border-color: transparent;
 }
 .modal-btn.primary:hover:not(:disabled) { opacity: .85; }
+
+/* ── Mode Toast (top-right) ── */
+#mode-toast-container {
+  position: fixed; top: 16px; right: 16px; z-index: 9999;
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+  pointer-events: none;
+}
+.mode-toast {
+  background: var(--bg-card); border: 1px solid var(--accent);
+  border-radius: var(--radius-md); padding: 10px 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  animation: mode-toast-in .25s ease-out;
+  font-size: 13px; font-weight: 600; color: var(--accent);
+  display: flex; align-items: center; gap: 10px;
+  pointer-events: all;
+}
+@keyframes mode-toast-in {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.mode-toast-close {
+  border: none; background: transparent; color: var(--text-muted);
+  font-size: 12px; cursor: pointer; padding: 0; line-height: 1;
+}
+.mode-toast-close:hover { color: var(--text-primary); }
 
 /* ── Toast ── */
 .toast-container {

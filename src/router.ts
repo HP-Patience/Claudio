@@ -167,10 +167,13 @@ export function createApp(opts: RouterOptions = {}): Express {
       ? `\n=== Mood Guidance ===\nUser mood seems: ${moodDetected}\nStrategy: validate first (1 slow/mid song), then gradually warm up. Never jump to extreme opposite.\nOutput "mood" and "arc" fields in your JSON.`
       : '';
 
+    const ncmLoggedIn = !!getNcmCookie();
+
     const fullPrompt = `${djPersona}
 
 ${basePrompt}
 ${moodGuidance}
+NetEase logged in: ${ncmLoggedIn}
 
 === User Message ===
 ${text}
@@ -178,6 +181,11 @@ ${text}
 IMPORTANT: Output ONLY valid JSON, no markdown, no extra text.
 "play" must be an array of search query strings, e.g. ["法老 人上人", "Bill Evans Waltz for Debby"].
 These will be used to search NetEase Cloud Music. If no song fits, "play" must be empty.
+
+When user says "随便听听" / "私人FM" / "随便放" / "随机音乐": set "play_mode" to "fm".
+When user says "心动模式" / "智能播放" / "根据这首继续" / "类似的多来点": set "play_mode" to "intelligence" and "play_mode_params" to { "songId": <current song id>, "playlistId": <playlist id> }.
+Only use play_mode when user explicitly asks for these features. Otherwise omit play_mode.
+
 {
   "say": "DJ播报文案（中文，简短自然，1-2句话）",
   "play": [],
@@ -200,7 +208,40 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
 
     // Execute play actions if executor is available
     let playedItems;
-    if (opts.executor && result.play && result.play.length > 0) {
+    if (opts.executor && (result.play_mode === 'fm' || result.play_mode === 'intelligence')) {
+      if (result.play_mode === 'fm') {
+        try {
+          const item = await opts.executor.startFM();
+          if (item) {
+            playedItems = [item];
+            broadcast('play', { tracks: [item], fm: true, arc: result.arc });
+            if (opts.db) {
+              addMessage(opts.db, { role: 'assistant', content: `Playing: ${item.name} by ${item.artist}` });
+            }
+          }
+        } catch {
+          // FM offline
+        }
+      } else if (result.play_mode === 'intelligence' && result.play_mode_params) {
+        try {
+          const items = await opts.executor.startIntelligence(
+            result.play_mode_params.songId ?? 0,
+            result.play_mode_params.playlistId ?? 0,
+          );
+          if (items.length > 0) {
+            playedItems = items;
+            broadcast('play', { tracks: items, smart: true, arc: result.arc });
+            if (opts.db) {
+              for (const item of items) {
+                addMessage(opts.db, { role: 'assistant', content: `Playing: ${item.name} by ${item.artist}` });
+              }
+            }
+          }
+        } catch {
+          // intelligence offline
+        }
+      }
+    } else if (opts.executor && result.play && result.play.length > 0) {
       const queries = result.play.filter((p: any) => typeof p === 'string');
       if (queries.length > 0) {
         try {
@@ -593,6 +634,52 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
   });
 
   // ── Direct Play ──
+
+  app.post('/api/play/fm/start', async (_req: Request, res: Response) => {
+    if (!opts.executor) return res.status(503).json({ error: 'executor unavailable' });
+    try {
+      const item = await opts.executor.startFM();
+      if (!item) return res.status(502).json({ error: 'FM API returned no song' });
+      broadcast('play', { tracks: [item], fm: true });
+      if (opts.db) addMessage(opts.db, { role: 'assistant', content: `Playing: ${item.name} by ${item.artist}` });
+      res.json(item);
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/play/intelligence/start', async (req: Request, res: Response) => {
+    if (!opts.executor) return res.status(503).json({ error: 'executor unavailable' });
+    const { songId, playlistId } = req.body;
+    if (!songId) return res.status(400).json({ error: 'songId required' });
+    try {
+      const items = await opts.executor.startIntelligence(Number(songId), playlistId ? Number(playlistId) : undefined);
+      if (!items.length) return res.status(502).json({ error: 'intelligence returned no songs' });
+      broadcast('play', { tracks: items, smart: true });
+      if (opts.db) {
+        for (const item of items) {
+          addMessage(opts.db, { role: 'assistant', content: `Playing: ${item.name} by ${item.artist}` });
+        }
+      }
+      res.json(items);
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/play/fm/next', async (_req: Request, res: Response) => {
+    if (!opts.executor) return res.status(503).json({ error: 'executor unavailable' });
+    const ps = opts.executor.getPlayState();
+    if (!ps.isFmMode) return res.status(400).json({ error: 'not in FM mode' });
+    try {
+      const item = await opts.executor.getNextFMSong();
+      if (!item) return res.status(502).json({ error: 'FM API returned no song' });
+      broadcast('play', { tracks: [item], fm: true });
+      res.json(item);
+    } catch (err) {
+      res.status(502).json({ error: (err as Error).message });
+    }
+  });
 
   app.post('/api/play/by-id', async (req: Request, res: Response) => {
     const { songId } = req.body;

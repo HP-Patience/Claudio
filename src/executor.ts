@@ -1,4 +1,4 @@
-import { searchSongs, getSongUrl } from './adapters/netease.js';
+import { searchSongs, getSongUrl, getSongDetail, getPersonalFM, getIntelligenceList } from './adapters/netease.js';
 import { getCurrentWeather, getCurrentWeatherByCoords } from './adapters/weather.js';
 import { getTodayEvents } from './adapters/feishu.js';
 
@@ -8,6 +8,7 @@ export interface PlayState {
   isPlaying: boolean;
   isSpeaking: boolean;
   volume: number;
+  isFmMode: boolean;
 }
 
 export interface PlayItem {
@@ -60,6 +61,7 @@ export function createExecutor() {
     isPlaying: false,
     isSpeaking: false,
     volume: 80,
+    isFmMode: false,
   };
 
   return {
@@ -73,6 +75,7 @@ export function createExecutor() {
         state.currentSong = items[0];
         state.queue = items;
         state.isPlaying = true;
+        state.isFmMode = false;
       }
 
       return items;
@@ -80,6 +83,57 @@ export function createExecutor() {
 
     acquireSpeaker: () => { state.isSpeaking = true; },
     releaseSpeaker: () => { state.isSpeaking = false; },
+
+    startFM: async (): Promise<PlayItem | null> => {
+      const song = await getPersonalFM();
+      if (!song) return null;
+      let url = '';
+      try { url = await getSongUrl(Number(song.id)); } catch { /* ok */ }
+      const item: PlayItem = { songId: String(song.id), name: song.name, artist: song.artist, url };
+      state.currentSong = item;
+      state.isFmMode = true;
+      state.isPlaying = true;
+      return item;
+    },
+
+    getNextFMSong: async (): Promise<PlayItem | null> => {
+      const song = await getPersonalFM();
+      if (!song) return null;
+      let url = '';
+      try { url = await getSongUrl(Number(song.id)); } catch { /* ok */ }
+      return { songId: String(song.id), name: song.name, artist: song.artist, url };
+    },
+
+    stopFM: () => { state.isFmMode = false; },
+
+    startIntelligence: async (songId: number, playlistId?: number): Promise<PlayItem[]> => {
+      const songs = await getIntelligenceList(songId, playlistId ?? 0);
+      let items: PlayItem[] = [];
+      for (const s of songs) {
+        let url = '';
+        try { url = await getSongUrl(Number(s.id)); } catch { /* ok */ }
+        items.push({ songId: String(s.id), name: s.name, artist: s.artist, url });
+      }
+      // Fallback: no playlist context, search by same artist
+      if (!items.length && !playlistId) {
+        const song = await getSongDetail(songId);
+        if (song?.artist) {
+          const fallbackSongs = await searchSongs(song.artist, 5);
+          items = [];
+          for (const s of fallbackSongs) {
+            let url = '';
+            try { url = await getSongUrl(Number(s.id)); } catch { /* ok */ }
+            items.push({ songId: String(s.id), name: s.name, artist: s.artist, url });
+          }
+        }
+      }
+      if (items.length > 0) {
+        state.currentSong = items[0];
+        state.queue = items;
+        state.isPlaying = true;
+      }
+      return items;
+    },
 
     getContext: async (opts?: { lat?: number; lon?: number }) => {
       const lat = opts?.lat;

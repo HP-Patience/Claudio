@@ -9,6 +9,8 @@ const state = {
   queue: [],
   lovedSongs: new Set(),
   ncmLoggedIn: false,
+  isFmMode: false,
+  isSmartMode: false,
 };
 
 let userCoords = null; // { lat, lon } from geolocation
@@ -26,6 +28,8 @@ const dom = {
   playBtn: $('#play-btn'),
   prevBtn: $('#prev-btn'),
   nextBtn: $('#next-btn'),
+  fmBtn: $('#fm-btn'),
+  smartBtn: $('#smart-btn'),
   progress: $('.progress-container'),
   progressBar: $('#progress-bar'),
   currentTime: $('#current-time'),
@@ -60,6 +64,9 @@ const dom = {
   settingsSave: $('#settings-save'),
   loveBtn: $('#love-btn'),
   hideBtn: $('#hide-btn'),
+  fmBadge: $('#fm-badge'),
+  smartBadge: $('#smart-badge'),
+  playerStatus: $('.player-status'),
   queuePanel: $('#queue-panel'),
   favsPanel: $('#favs-panel'),
   statsPanel: $('#stats-panel'),
@@ -130,7 +137,15 @@ audio.addEventListener('ended', () => {
   state.isPlaying = false;
   dom.playBtn.textContent = '▶';
   dom.onAir.classList.remove('active');
-  nextTrack();
+  if (state.isFmMode) {
+    fetchNextFm();
+  } else if (state.isSmartMode && state.queue.length > 1) {
+    nextTrack();
+  } else {
+    state.isSmartMode = false;
+    updateModeDisplay();
+    nextTrack();
+  }
 });
 
 audio.addEventListener('play', () => {
@@ -155,6 +170,26 @@ function formatTime(s) {
 dom.playBtn.addEventListener('click', () => togglePlay());
 dom.prevBtn.addEventListener('click', () => prevTrack());
 dom.nextBtn.addEventListener('click', () => nextTrack());
+
+dom.fmBtn.addEventListener('click', async () => {
+  try {
+    const res = await fetch('/api/play/fm/start', { method: 'POST' });
+    if (!res.ok) showModeToast('FM 启动失败');
+  } catch { showModeToast('FM 启动失败'); }
+});
+
+dom.smartBtn.addEventListener('click', async () => {
+  const track = state.currentTrack;
+  if (!track || !track.songId) { showModeToast('请先播放一首歌'); return; }
+  try {
+    const res = await fetch('/api/play/intelligence/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ songId: track.songId }),
+    });
+    if (!res.ok) showModeToast('智能模式不可用');
+  } catch { showModeToast('智能模式启动失败'); }
+});
 
 // ── love button ──
 dom.loveBtn.addEventListener('click', async () => {
@@ -419,8 +454,64 @@ function setQueue(items) {
   refreshQueuePanel();
 }
 
+function updateModeDisplay() {
+  dom.fmBadge.style.display = state.isFmMode ? '' : 'none';
+  dom.smartBadge.style.display = state.isSmartMode ? '' : 'none';
+  if (state.isFmMode) {
+    dom.playerStatus.textContent = 'FM MODE';
+  } else if (state.isSmartMode) {
+    dom.playerStatus.textContent = 'SMART';
+  } else {
+    dom.playerStatus.textContent = 'READY';
+  }
+}
+
+function showModeToast(label) {
+  let container = document.getElementById('mode-toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'mode-toast-container';
+    document.body.appendChild(container);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'mode-toast';
+  const close = document.createElement('button');
+  close.className = 'mode-toast-close';
+  close.textContent = '✕';
+  close.addEventListener('click', () => toast.remove());
+  toast.textContent = label;
+  toast.appendChild(close);
+  container.appendChild(toast);
+  setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3000);
+}
+
+let _fetchingFm = false;
+
+async function fetchNextFm() {
+  if (_fetchingFm) return;
+  _fetchingFm = true;
+  try {
+    const res = await fetch('/api/play/fm/next', { method: 'POST' });
+    if (!res.ok) { state.isFmMode = false; updateModeDisplay(); showModeToast('FM 播放结束'); return; }
+    const item = await res.json();
+    if (!item || !item.url) { state.isFmMode = false; updateModeDisplay(); showModeToast('FM 播放结束'); return; }
+    // Don't play here — WS play handler does it via broadcast.
+    // Just update UI so there's no gap before WS arrives.
+    state.currentTrack = item;
+    dom.nowPlaying.textContent = `${item.name} - ${item.artist}`;
+    dom.onAir.classList.add('active');
+  } catch {
+    state.isFmMode = false;
+    updateModeDisplay();
+  } finally {
+    _fetchingFm = false;
+  }
+}
+
 async function nextTrack() {
-  if (state.queue.length > 1) {
+  if (state.isFmMode) {
+    await fetchNextFm();
+  } else if (state.queue.length > 1) {
     const next = state.queue.shift();
     state.queue.push(next);
     await resolveItemUrl(state.queue[0]);
@@ -431,7 +522,9 @@ async function nextTrack() {
 }
 
 async function prevTrack() {
-  if (state.queue.length > 1) {
+  if (state.isFmMode) {
+    await fetchNextFm();
+  } else if (state.queue.length > 1) {
     const prev = state.queue.pop();
     state.queue.unshift(prev);
     await resolveItemUrl(state.queue[0]);
@@ -445,7 +538,7 @@ function playTrack(item) {
   if (!item || !item.url) return;
   state.currentTrack = item;
   audio.src = item.url;
-  audio.play();
+  audio.play().catch(() => {});
   dom.nowPlaying.textContent = `${item.name} - ${item.artist}`;
   dom.onAir.classList.add('active');
   addChatMessage(`🎵 Now playing: ${item.name} — ${item.artist}`, 'system');
@@ -603,9 +696,20 @@ function connectWs() {
       switch (msg.type) {
         case 'play':
           if (msg.payload?.tracks) {
+            const becameFm = !!msg.payload.fm && !state.isFmMode;
+            const becameSmart = !!msg.payload.smart && !state.isSmartMode;
+            state.isFmMode = !!msg.payload.fm;
+            state.isSmartMode = !!msg.payload.smart;
+            if (!state.isFmMode && !state.isSmartMode) {
+              state.isFmMode = false;
+              state.isSmartMode = false;
+            }
             if (msg.payload.arc) {
               state._arcSteps = msg.payload.arc.steps;
             }
+            updateModeDisplay();
+            if (becameFm) showModeToast('FM 私人电台');
+            if (becameSmart) showModeToast('心动智能模式');
             setQueue(msg.payload.tracks);
             playTrack(msg.payload.tracks[0]);
           }

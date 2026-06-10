@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('node:child_process'); // silence accidental imports
 
-import { searchSongs, getSongDetail, getSongUrl, getLyric, getRecommendations } from '../src/adapters/netease.js';
+import { searchSongs, getSongDetail, getSongUrl, getLyric, getRecommendations, getPersonalFM, getIntelligenceList } from '../src/adapters/netease.js';
 
 describe('netease adapter', () => {
   const API = 'http://localhost:3001';
@@ -103,5 +103,59 @@ describe('netease adapter', () => {
     expect(results).toHaveLength(1);
     expect(results[0].name).toBe('Autumn Leaves');
     expect(results[0].artist).toBe('Bill Evans');
+  });
+
+  it('getPersonalFM returns first song from FM response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        data: [
+          { id: 321, name: 'Random Song', ar: [{ name: 'Artist Name' }], al: { name: 'Album' } },
+        ],
+      }), { status: 200 }),
+    );
+
+    const song = await getPersonalFM();
+    expect(song).not.toBeNull();
+    expect(song!.id).toBe(321);
+    expect(song!.name).toBe('Random Song');
+    expect(song!.artist).toBe('Artist Name');
+  });
+
+  it('getPersonalFM returns null on empty FM data', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: [] }), { status: 200 }),
+    );
+
+    const song = await getPersonalFM();
+    expect(song).toBeNull();
+  });
+
+  it('getIntelligenceList returns parsed song list', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        data: [
+          { id: 111, name: 'Intelligent Song', ar: [{ name: 'AI Artist' }], al: { name: 'Smart Album' } },
+          { id: 222, name: 'Another Pick', ar: [{ name: 'Another Artist' }], al: { name: 'Another Album' } },
+        ],
+      }), { status: 200 }),
+    );
+
+    const results = await getIntelligenceList(111, 456);
+    expect(results).toHaveLength(2);
+    expect(results[0].name).toBe('Intelligent Song');
+    expect(results[1].name).toBe('Another Pick');
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/playmode/intelligence/list?id=111&pid=456'),
+      expect.any(Object),
+    );
+  });
+
+  it('getIntelligenceList returns empty array when no data', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: [] }), { status: 200 }),
+    );
+
+    const results = await getIntelligenceList(111, 456);
+    expect(results).toEqual([]);
   });
 });

@@ -96,3 +96,26 @@ export async function getRecommendations(): Promise<Song[]> {
     album: s.al?.name ?? '',
   }));
 }
+
+export async function getPersonalFM(): Promise<Song | null> {
+  const data = await ncmFetch<any>('/personal_fm');
+  const song = data?.data?.[0];
+  if (!song) return null;
+  return {
+    id: song.id,
+    name: song.name,
+    artist: song.ar?.[0]?.name ?? '',
+    album: song.al?.name ?? '',
+  };
+}
+
+export async function getIntelligenceList(songId: number, playlistId: number): Promise<Song[]> {
+  const data = await ncmFetch<any>(`/playmode/intelligence/list?id=${songId}&pid=${playlistId}`);
+  const songs = data?.data ?? [];
+  return songs.map((s: any) => ({
+    id: s.id,
+    name: s.name,
+    artist: s.ar?.[0]?.name ?? '',
+    album: s.al?.name ?? '',
+  }));
+}

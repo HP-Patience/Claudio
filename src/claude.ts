@@ -5,6 +5,8 @@ import https from 'node:https';
 export interface ClaudeOutput {
   say: string;
   play: string[];
+  play_mode?: 'fm' | 'intelligence';
+  play_mode_params?: { songId?: number; playlistId?: number };
   reason: string;
   segue: string;
   error?: boolean;
@@ -28,6 +30,8 @@ export function parseOutput(raw: string): ClaudeOutput {
       return {
         say: parsed.say ?? raw,
         play: parsed.play ?? [],
+        play_mode: parsed.play_mode,
+        play_mode_params: parsed.play_mode_params,
         reason: parsed.reason ?? '',
         segue: parsed.segue ?? '',
         mood: parsed.mood,
