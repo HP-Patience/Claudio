@@ -11,7 +11,7 @@ import { broadcast } from './ws.js';
 import { handleSkip } from './feedback.js';
 import { cacheCoords } from './triggers.js';
 import { getSongUrl, getSongDetail } from './adapters/netease.js';
-import { getCurrentWeatherByCoords, setWeatherKey } from './adapters/weather.js';
+import { getCurrentWeatherByCoords, setWeatherKey, hasWeatherKey } from './adapters/weather.js';
 import { setNcmBase } from './adapters/netease.js';
 import { setFeishuConfig } from './adapters/feishu.js';
 import { setUpnpDevices } from './adapters/upnp.js';
@@ -414,6 +414,7 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
     const lon = Number(req.query.lon);
     if (isNaN(lat) || isNaN(lon)) return res.status(400).json({ error: 'lat and lon required' });
     cacheCoords(lat, lon);
+    if (!hasWeatherKey()) return res.status(204).send();
     try {
       const data = await getCurrentWeatherByCoords(lat, lon);
       res.json(data);
@@ -484,6 +485,24 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
       if (!detail) return res.status(404).json({ error: 'song not found' });
 
       const item = { songId: String(detail.id), name: detail.name, artist: detail.artist, url };
+      res.json(item);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown';
+      res.status(502).json({ error: msg });
+    }
+  });
+
+  app.post('/api/play/search', async (req: Request, res: Response) => {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'name required' });
+
+    try {
+      const { searchSongs } = await import('./adapters/netease.js');
+      const songs = await searchSongs(name, 1);
+      if (!songs.length) return res.status(404).json({ error: 'not found' });
+
+      const url = await getSongUrl(Number(songs[0].id));
+      const item = { songId: String(songs[0].id), name: songs[0].name, artist: songs[0].artist, url };
       res.json(item);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown';

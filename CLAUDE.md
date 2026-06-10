@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-不准在3000端口启动项目
+不准在3000端口启动项目（默认端口 3005）
 
 ## 项目愿景
 
@@ -35,50 +35,94 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
      Music API   TTS API    UPnP API
 ```
 
-### 分层职责
+### 代码到架构层的映射
 
-| 层 | 职责 | 决策者 |
-|---|---|---|
-| **Context Collector** | 收集当前环境快照：设备状态、播放队列、时间、用户偏好、网络设备 | 代码 |
-| **Orchestrator** | 理解意图、拆解步骤、决定调什么 API、传什么参数 | **Claude Code (仅此一家)** |
-| **Action Executor** | 执行 JSON 动作（play/stop/next/say/volume_up...），返回结果 | 代码 |
-| **Service Adapters** | 对接具体服务的 SDK/HTTP API（Music、TTS、UPnP） | 代码 |
-
-### Claude 动作格式
-
-所有 Claude 输出必须是结构化 JSON，格式示例：
-
-```json
-{
-  "thought": "用户说晚安，环境检测到22点、卧室灯亮着、当前静音。决定: 关灯 + 播放下雨白噪音。",
-  "actions": [
-    { "service": "upnp", "action": "set_power", "params": { "device": "bedroom_light", "on": false } },
-    { "service": "music", "action": "play", "params": { "uri": "rain_white_noise", "volume": 30 } }
-  ]
-}
-```
-
-关键字段：
-- `thought`: Claude 的推理过程（可审计/可调试）
-- `actions[]`: 有序动作列表（顺序执行）
-- 每个 `action`: `service` + `action` + `params`
-
-## 开发命令
-
-（待项目定型后补充）
+| 层 | 文件 |
+|---|---|
+| **Context Collector** | [src/context.ts](src/context.ts) — 加载 user corpus + 组装 prompt；[src/executor.ts](src/executor.ts) — `getContext()` 拉取天气/日历 |
+| **Orchestrator** | [src/claude.ts](src/claude.ts) — 调用 Anthropic / OpenAI-compatible API，解析 JSON 输出 |
+| **Action Executor** | [src/executor.ts](src/executor.ts) — `executePlay()` 搜索+播放；[src/router.ts](src/router.ts) — API 路由编排 |
+| **Service Adapters** | [src/adapters/netease.ts](src/adapters/netease.ts) — 网易云音乐搜索/播放；[src/adapters/weather.ts](src/adapters/weather.ts) — OpenWeather；[src/adapters/feishu.ts](src/adapters/feishu.ts) — 飞书日历；[src/adapters/upnp.ts](src/adapters/upnp.ts) — UPnP 设备控制；[src/tts.ts](src/tts.ts) — Fish Audio TTS |
 
 ## 技术栈
 
-（待定，推荐方向）
-- 后端: Python (FastAPI) 或 Node.js
-- Claude 集成: Claude Code CLI 调用 或 Anthropic SDK
-- 上下文收集: 系统命令 + 状态轮询
-- 服务对接: 各服务 SDK / REST API
+- **Runtime**: Node.js + TypeScript，`tsx` 直接执行（无编译步骤）
+- **HTTP**: Express 5，`http.createServer` 包装
+- **WebSocket**: `ws` 库，path=`/stream`，用于实时推送 play/say/token_usage 事件到前端
+- **数据库**: SQLite via `better-sqlite3`（同步 API），文件 `state.db`
+- **LLM**: Anthropic Messages API (claude-sonnet-4-20250514) 或 OpenAI-compatible API (DeepSeek)，通过 `https.request` / `fetch`
+- **前端**: 单文件 [frontend/app.js](frontend/app.js) + HTML/CSS，无框架，由 Express 静态托管
+- **测试**: Vitest，测试文件在 `tests/`，supertest 做 HTTP 集成测试
+
+## 开发命令
+
+```bash
+npm run dev          # 启动开发服务器 (tsx + .env)
+npm test             # 运行全部测试 (vitest run)
+npm run test:watch   # 监视模式
+npx vitest run tests/router.test.ts   # 运行单个测试文件
+```
+
+## 运行时流程
+
+```
+POST /api/chat { text }
+  → classifyIntent(): 简单命令直接返回 action，跳过 Claude
+  → addMessage(db, user msg)
+  → executor.getContext() → 天气 + 日历
+  → getMessages(db, 10) → 最近对话历史
+  → assemblePrompt(user corpus + weather + calendar + time + history)
+  → invokeClaude(prompt) → parseOutput() → { say, play[], reason, segue }
+  → addMessage(db, assistant reply)
+  → executor.executePlay(play[]) → 搜索网易云 → 返回 PlayItem[]
+  → broadcast('play', tracks)  ← WebSocket 推送给前端
+  → broadcast('say', text)     ← 触发前端 TTS
+  → res.json({ ...result, played })
+```
+
+关键点：
+- `classifyIntent` 仅匹配精确简单命令（下一首、pause 等），其余全部走 Claude
+- Claude 输出要求纯 JSON（prompt 中 `IMPORTANT: Output ONLY valid JSON`），`parseOutput` 用 regex 兜底提取
+- 前端 audio 由前端直接播放 URL，后端不流式传输音频
+
+## 数据库 (SQLite)
+
+6 张表，全部在 [src/db.ts](src/db.ts) 中定义：
+
+| 表 | 用途 |
+|---|---|
+| `messages` | 对话历史 (role, content, created_at) |
+| `plays` | 播放记录 (song_id, song_name, artist, played_at) |
+| `plan` | 每日歌单计划 (date UNIQUE, plan_json) |
+| `prefs` | KV 配置存储 (key PRIMARY KEY, value) |
+| `favorites` | 收藏歌曲 (song_id PRIMARY KEY, song_name, artist) |
+| `hidden_songs` | 隐藏歌曲 (song_id PRIMARY KEY, song_name, artist) |
+
+## 用户语料系统 (User Corpus)
+
+`user/` 目录下的文件用于个性化 Claude 的 DJ 行为：
+
+| 文件 | 内容 |
+|---|---|
+| `taste.md` | 音乐品味描述 |
+| `routines.md` | 日常作息 |
+| `mood-rules.md` | 情绪→音乐映射规则 |
+| `playlists.json` | 预设歌单 |
+
+`loadUserCorpus()` 在 [src/context.ts](src/context.ts) 中读取这些文件，拼入发给 Claude 的 prompt。目录路径可通过 `USER_CORPUS_DIR` 环境变量或设置面板配置。
+
+## 配置系统
+
+双层配置：`.env` 文件 + `prefs` 数据库表。DB 值优先于 `.env`。
+
+`POST /api/config` 同时写入 DB 和 `.env` 文件（`syncEnvFile` 函数）。密码类字段含 `*` 的跳过写入（占位符保护）。
+
+API 配置测试 (`POST /api/config/test`)：自动检测 Anthropic vs OpenAI-compatible 端点，分别发测试请求。
 
 ## 设计约束
 
 1. **模块严格解耦**: Context Collector、Orchestrator、Action Executor 之间仅通过结构化数据通信，不共享内部状态。
-2. **无硬编码意图**: 代码中不允许出现 if/switch 匹配用户意图的逻辑。意图理解是 Claude 的专属职责。
+2. **无硬编码意图**: 代码中不允许出现 if/switch 匹配用户意图的逻辑。意图理解是 Claude 的专属职责。（`classifyIntent` 仅处理极简播放控制命令）
 3. **Claude 输出即可执行**: 所有 Claude 返回的 JSON 动作必须能被 Action Executor 直接消费，不需要二次 LLM 调用或复杂转换。
 4. **可审计追踪**: 每次完整的 输入→Claude→动作 链路都应该记录日志，包含 Claude 的 thought 过程。
 5. **幂等性优先**: 每个动作应该是幂等的或至少可安全重试的。

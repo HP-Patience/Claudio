@@ -186,7 +186,7 @@ dom.hideBtn.addEventListener('click', async () => {
   } catch { /* ignore */ }
 
   if (state.queue.length > 1) {
-    nextTrack();
+    await nextTrack();
   }
 });
 
@@ -244,8 +244,9 @@ function renderQueuePanel() {
       playBtn.className = 'track-action';
       playBtn.textContent = '▶';
       playBtn.title = 'Play now';
-      playBtn.addEventListener('click', (e) => {
+      playBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        await resolveItemUrl(state.queue[idx]);
         const [moved] = state.queue.splice(idx, 1);
         state.queue.unshift(moved);
         playTrack(state.queue[0]);
@@ -258,12 +259,13 @@ function renderQueuePanel() {
     rmBtn.className = 'track-action';
     rmBtn.textContent = '×';
     rmBtn.title = idx === 0 ? 'Stop' : 'Remove';
-    rmBtn.addEventListener('click', (e) => {
+    rmBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       state.queue.splice(idx, 1);
       dom.queueCount.textContent = String(state.queue.length);
       if (idx === 0) {
         if (state.queue.length > 0) {
+          await resolveItemUrl(state.queue[0]);
           playTrack(state.queue[0]);
         } else {
           audio.pause();
@@ -372,6 +374,21 @@ async function renderFavsPanel() {
   }
 }
 
+async function resolveItemUrl(item) {
+  if (item.url) return;
+  try {
+    const endpoint = item.songId ? '/api/play/by-id' : '/api/play/search';
+    const body = item.songId ? { songId: item.songId } : { name: item.name };
+    const r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const fresh = await r.json();
+    if (fresh.url) Object.assign(item, fresh);
+  } catch { /* ignore */ }
+}
+
 function togglePlay() {
   if (audio.paused && audio.src) {
     audio.play();
@@ -387,20 +404,22 @@ function setQueue(items) {
   refreshQueuePanel();
 }
 
-function nextTrack() {
+async function nextTrack() {
   if (state.queue.length > 1) {
     const next = state.queue.shift();
     state.queue.push(next);
+    await resolveItemUrl(state.queue[0]);
     playTrack(state.queue[0]);
     dom.queueCount.textContent = String(state.queue.length);
     renderQueuePanel();
   }
 }
 
-function prevTrack() {
+async function prevTrack() {
   if (state.queue.length > 1) {
     const prev = state.queue.pop();
     state.queue.unshift(prev);
+    await resolveItemUrl(state.queue[0]);
     playTrack(state.queue[0]);
     dom.queueCount.textContent = String(state.queue.length);
     renderQueuePanel();
@@ -662,11 +681,22 @@ function showToast(s) {
 
   const toast = document.createElement('div');
   toast.className = 'toast-card';
-  toast.innerHTML = `<span class="toast-text">${s.text}</span>
-    <div class="toast-actions">
-      <button class="toast-btn play" data-scene="${s.scene}">播放</button>
-      <button class="toast-btn dismiss">忽略</button>
-    </div>`;
+  const toastText = document.createElement('span');
+  toastText.className = 'toast-text';
+  toastText.textContent = s.text;
+  const toastActions = document.createElement('div');
+  toastActions.className = 'toast-actions';
+  const playBtn = document.createElement('button');
+  playBtn.className = 'toast-btn play';
+  playBtn.dataset.scene = s.scene;
+  playBtn.textContent = '播放';
+  const dismissBtn = document.createElement('button');
+  dismissBtn.className = 'toast-btn dismiss';
+  dismissBtn.textContent = '忽略';
+  toastActions.appendChild(playBtn);
+  toastActions.appendChild(dismissBtn);
+  toast.appendChild(toastText);
+  toast.appendChild(toastActions);
 
   const removeSuggestion = () => {
     if (toast.parentNode) toast.remove();
@@ -827,6 +857,10 @@ async function init() {
             setQueue(state.queue);
             state._currentScene = data.scene.scene;
             addChatMessage(`📋 场景推荐 (${data.scene.scene}): ${data.reason}`, 'system');
+            // resolve first track URL so it's ready when user clicks play
+            await resolveItemUrl(state.queue[0]);
+            state._pendingPlay = state.queue[0];
+            renderQueuePanel();
           }
         } catch { /* ignore */ }
       },
@@ -841,6 +875,18 @@ async function init() {
   }
 
   connectWs();
+
+  // deferred play on first user interaction (browser blocks autoplay)
+  const firstInteraction = () => {
+    if (state._pendingPlay) {
+      playTrack(state._pendingPlay);
+      state._pendingPlay = null;
+    }
+    document.removeEventListener('click', firstInteraction);
+    document.removeEventListener('keydown', firstInteraction);
+  };
+  document.addEventListener('click', firstInteraction);
+  document.addEventListener('keydown', firstInteraction);
 }
 
 init();
