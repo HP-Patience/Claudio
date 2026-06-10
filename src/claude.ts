@@ -61,6 +61,7 @@ export async function invokeClaude(
 
   const cleanBase = baseUrl.replace(/\/+$/, '');
   const isAnthropic = cleanBase.includes('anthropic.com');
+  const model = (db ? getPref(db, 'api_model') || '' : '') || process.env['API_MODEL'] || 'deepseek-v4-flash';
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -79,7 +80,7 @@ export async function invokeClaude(
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model,
           max_tokens: 1024,
           messages: [{ role: 'user', content: prompt }],
         }),
@@ -99,7 +100,7 @@ export async function invokeClaude(
       // OpenAI-compatible API (DeepSeek, etc.) — use https.request for reliability
       const result = await new Promise<{ text: string; usage?: ClaudeUsage }>((resolve, reject) => {
         const body = JSON.stringify({
-          model: 'deepseek-chat',
+          model,
           max_tokens: 1024,
           messages: [{ role: 'user', content: prompt }],
         });

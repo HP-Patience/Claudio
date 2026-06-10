@@ -46,6 +46,9 @@ const dom = {
   settingsClose: $('#settings-close'),
   settingsApiKey: $('#settings-api-key'),
   settingsBaseUrl: $('#settings-base-url'),
+  settingsApiModel: $('#settings-api-model'),
+  settingsFetchModels: $('#settings-fetch-models'),
+  modelDropdown: $('#model-dropdown'),
   settingsNcmApi: $('#settings-ncm-api'),
   settingsWeatherKey: $('#settings-weather-key'),
   settingsFishKey: $('#settings-fish-key'),
@@ -994,7 +997,7 @@ async function startQrLogin() {
     });
     const imgData = await imgRes.json();
     if (imgData.data?.qrimg) {
-      dom.qrImage.src = 'data:image/png;base64,' + imgData.data.qrimg;
+      dom.qrImage.src = imgData.data.qrimg;
       dom.qrImage.style.display = '';
       dom.qrPlaceholder.style.display = 'none';
     } else {
@@ -1129,6 +1132,7 @@ async function loadConfig() {
     const data = await res.json();
     dom.settingsApiKey.value = data.apiKey || '';
     dom.settingsBaseUrl.value = data.baseUrl || 'https://api.anthropic.com';
+    dom.settingsApiModel.value = data.apiModel || '';
     dom.settingsNcmApi.value = data.ncmApi || 'http://localhost:3001';
     dom.settingsWeatherKey.value = data.weatherKey || '';
     dom.settingsFishKey.value = data.fishKey || '';
@@ -1157,6 +1161,7 @@ dom.settingsTest.addEventListener('click', async () => {
       body: JSON.stringify({
         apiKey: dom.settingsApiKey.value,
         baseUrl: dom.settingsBaseUrl.value,
+        apiModel: dom.settingsApiModel.value,
       }),
     });
     const data = await res.json();
@@ -1175,6 +1180,52 @@ dom.settingsTest.addEventListener('click', async () => {
   }
 });
 
+dom.settingsFetchModels.addEventListener('click', async () => {
+  // Toggle if already open
+  if (dom.modelDropdown.classList.contains('open')) {
+    dom.modelDropdown.classList.remove('open');
+    return;
+  }
+  dom.settingsFetchModels.disabled = true;
+  dom.settingsFetchModels.textContent = '⋯';
+  dom.settingsStatus.textContent = '';
+  try {
+    const res = await fetch('/api/models');
+    const data = await res.json();
+    if (data.ok && data.models) {
+      dom.modelDropdown.innerHTML = '';
+      for (const m of data.models) {
+        const item = document.createElement('div');
+        item.className = 'model-dropdown-item';
+        item.textContent = m;
+        item.addEventListener('click', () => {
+          dom.settingsApiModel.value = m;
+          dom.modelDropdown.classList.remove('open');
+        });
+        dom.modelDropdown.appendChild(item);
+      }
+      dom.modelDropdown.classList.add('open');
+      dom.settingsStatus.textContent = `✓ ${data.models.length} 个模型`;
+      dom.settingsStatus.className = 'form-status success';
+    } else {
+      dom.settingsStatus.textContent = `✗ ${data.message || '获取失败'}`;
+      dom.settingsStatus.className = 'form-status error';
+    }
+  } catch (err) {
+    dom.settingsStatus.textContent = `✗ ${err.message}`;
+    dom.settingsStatus.className = 'form-status error';
+  } finally {
+    dom.settingsFetchModels.disabled = false;
+    dom.settingsFetchModels.textContent = '▼';
+  }
+});
+// Close dropdown on click outside
+document.addEventListener('click', (e) => {
+  if (!e.target || (!dom.modelDropdown.contains(e.target) && !dom.settingsFetchModels.contains(e.target))) {
+    dom.modelDropdown.classList.remove('open');
+  }
+});
+
 dom.settingsSave.addEventListener('click', async () => {
   dom.settingsStatus.textContent = '保存中…';
   dom.settingsStatus.className = 'form-status';
@@ -1186,6 +1237,7 @@ dom.settingsSave.addEventListener('click', async () => {
       body: JSON.stringify({
         apiKey: dom.settingsApiKey.value,
         baseUrl: dom.settingsBaseUrl.value,
+        apiModel: dom.settingsApiModel.value,
         ncmApi: dom.settingsNcmApi.value,
         weatherKey: dom.settingsWeatherKey.value,
         fishKey: dom.settingsFishKey.value,

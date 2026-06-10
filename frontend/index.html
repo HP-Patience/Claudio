@@ -136,6 +136,15 @@
             <label class="form-label" for="settings-base-url">Base URL</label>
             <input type="url" id="settings-base-url" class="form-input" placeholder="https://api.anthropic.com" autocomplete="off" />
           </div>
+          <div class="form-group">
+            <label class="form-label" for="settings-api-model">Model</label>
+            <div class="input-row">
+              <div class="model-input-wrap">
+                <input type="text" id="settings-api-model" class="form-input" placeholder="deepseek-v4-flash" autocomplete="off" />
+                <button class="form-btn-small" id="settings-fetch-models" title="拉取模型列表">▼</button>
+                <div class="model-dropdown" id="model-dropdown"></div>
+              </div>
+            </div>
         </fieldset>
 
         <fieldset class="form-fieldset">

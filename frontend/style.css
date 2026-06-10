@@ -466,6 +466,32 @@ body {
 }
 
 .form-group { display: flex; flex-direction: column; gap: 6px; }
+.input-row { display: flex; gap: 6px; align-items: center; }
+.input-row .form-input { flex: 1; }
+.form-btn-small {
+  width: 34px; height: 34px; flex-shrink: 0;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-surface); color: var(--text-primary);
+  font-size: 16px; cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+  transition: border-color .2s, background .2s;
+}
+.form-btn-small:hover { border-color: var(--accent); background: var(--bg-hover); }
+.form-btn-small:disabled { opacity: 0.4; cursor: not-allowed; }
+.model-input-wrap { position: relative; display: flex; flex: 1; gap: 6px; align-items: center; }
+.model-input-wrap .form-input { flex: 1; }
+.model-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 44px;
+  z-index: 100; background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); max-height: 200px; overflow-y: auto;
+  display: none; box-shadow: 0 4px 16px rgba(0,0,0,.3);
+}
+.model-dropdown.open { display: block; }
+.model-dropdown-item {
+  padding: 8px 12px; font-size: 13px; cursor: pointer;
+  transition: background .15s;
+}
+.model-dropdown-item:hover { background: var(--bg-hover); color: var(--accent); }
 .form-label {
   font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
   font-family: var(--font-mono); color: var(--text-muted);

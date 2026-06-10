@@ -291,6 +291,7 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
     const env = readEnvFile();
     const apiKey = env.ANTHROPIC_API_KEY || getPref(opts.db, 'api_key') || '';
     const baseUrl = env.ANTHROPIC_BASE_URL || getPref(opts.db, 'api_base_url') || '';
+    const apiModel = env.API_MODEL || getPref(opts.db, 'api_model') || '';
     const ncmApi = env.NCM_API || getPref(opts.db, 'ncm_api') || '';
     const weatherKey = env.SENIVERSE_API_KEY || getPref(opts.db, 'weather_key') || '';
     const fishKey = env.FISH_AUDIO_API_KEY || getPref(opts.db, 'fish_key') || '';
@@ -299,12 +300,12 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
     const upnpDevices = env.UPNP_DEVICES || getPref(opts.db, 'upnp_devices') || '[]';
     const userCorpusDir = env.USER_CORPUS_DIR || getPref(opts.db, 'user_corpus_dir') || '';
     const ncmLoggedIn = !!getNcmCookie();
-    res.json({ apiKey, baseUrl, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir, ncmLoggedIn });
+    res.json({ apiKey, baseUrl, apiModel, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir, ncmLoggedIn });
   });
 
   app.post('/api/config', (req: Request, res: Response) => {
     if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
-    const { apiKey, baseUrl, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir } = req.body;
+    const { apiKey, baseUrl, apiModel, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir } = req.body;
     // Secrets: skip empty or masked values to avoid overwriting with placeholder
     if (apiKey !== undefined && apiKey !== '' && !apiKey.includes('*')) {
       setPref(opts.db, 'api_key', apiKey);
@@ -320,6 +321,7 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
     }
     // Non-secrets: allow empty to clear
     if (baseUrl !== undefined) setPref(opts.db, 'api_base_url', baseUrl);
+    if (apiModel !== undefined) setPref(opts.db, 'api_model', apiModel);
     if (ncmApi !== undefined) setPref(opts.db, 'ncm_api', ncmApi);
     if (feishuAppId !== undefined) setPref(opts.db, 'feishu_app_id', feishuAppId);
     if (upnpDevices !== undefined) setPref(opts.db, 'upnp_devices', upnpDevices);
@@ -348,13 +350,14 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
 
     const cleanBase = baseUrl.replace(/\/+$/, '');
     const isAnthropic = cleanBase.includes('anthropic.com');
+    const testModel = req.body.apiModel || getPref(opts.db, 'api_model') || 'deepseek-v4-flash';
 
     try {
       if (isAnthropic) {
         const response = await fetch(`${cleanBase}/v1/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] }),
+          body: JSON.stringify({ model: testModel, max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] }),
         });
         if (!response.ok) {
           const text = await response.text().catch(() => 'unknown error');
@@ -362,8 +365,8 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
         }
         res.json({ ok: true, message: '主人，我在' });
       } else {
-        // OpenAI-compatible (DeepSeek, etc.)
-        const body = JSON.stringify({ model: 'deepseek-chat', max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] });
+        // OpenAI-compatible
+        const body = JSON.stringify({ model: testModel, max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] });
         const u = new URL(`${cleanBase}/v1/chat/completions`);
         const result = await new Promise<{ ok: boolean; message: string }>((resolve) => {
           const req = https.request({
@@ -392,6 +395,33 @@ These will be used to search NetEase Cloud Music. If no song fits, "play" must b
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(502).json({ ok: false, message: `连接失败: ${msg}` });
+    }
+  });
+
+  app.get('/api/models', async (_req: Request, res: Response) => {
+    if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
+    const apiKey = getPref(opts.db, 'api_key') || '';
+    const baseUrl = getPref(opts.db, 'api_base_url') || '';
+    if (!apiKey) return res.json({ ok: false, message: 'API Key 未配置' });
+    const cleanBase = baseUrl.replace(/\/+$/, '');
+    if (cleanBase.includes('anthropic.com')) return res.json({ ok: false, message: 'Anthropic 不支持列出模型' });
+    try {
+      // OpenAI-compatible: try /v1/models first, fallback to /models (DeepSeek)
+      let models: string[] = [];
+      for (const path of ['/v1/models', '/models']) {
+        const response = await fetch(`${cleanBase}${path}`, {
+          headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' },
+        });
+        if (response.ok) {
+          const data = await response.json() as { data?: Array<{ id: string }> };
+          models = data.data?.map(m => m.id) || [];
+          break;
+        }
+      }
+      if (!models.length) return res.json({ ok: false, message: '无法获取模型列表' });
+      res.json({ ok: true, models });
+    } catch (err) {
+      res.json({ ok: false, message: err instanceof Error ? err.message : '获取失败' });
     }
   });
 
