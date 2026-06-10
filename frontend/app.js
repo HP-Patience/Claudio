@@ -80,6 +80,7 @@ const dom = {
   settingsSave: $('#settings-save'),
   loveBtn: $('#love-btn'),
   hideBtn: $('#hide-btn'),
+  similarBtn: $('#similar-btn'),
   fmBadge: $('#fm-badge'),
   smartBadge: $('#smart-badge'),
   playerStatus: $('.player-status'),
@@ -253,6 +254,35 @@ dom.hideBtn.addEventListener('click', async () => {
 
   if (state.queue.length > 1) {
     await nextTrack();
+  }
+});
+
+// ── similar songs button ──
+dom.similarBtn.addEventListener('click', async () => {
+  const track = state.currentTrack;
+  if (!track || !track.songId) { showModeToast('请先播放一首歌'); return; }
+
+  dom.similarBtn.disabled = true;
+  dom.similarBtn.textContent = '…';
+  try {
+    const res = await fetch('/api/play/similar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ songId: track.songId }),
+    });
+    if (!res.ok) throw new Error(res.statusText);
+    const data = await res.json();
+    const songs = data.songs || [];
+    if (songs.length === 0) { showModeToast('没有找到相似歌曲'); return; }
+
+    state.queue.push(...songs);
+    setQueue(state.queue);
+    showModeToast(`已添加 ${songs.length} 首相似歌曲`);
+  } catch {
+    showModeToast('获取相似歌曲失败');
+  } finally {
+    dom.similarBtn.textContent = '相似';
+    dom.similarBtn.disabled = false;
   }
 });
 

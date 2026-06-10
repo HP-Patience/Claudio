@@ -10,7 +10,7 @@ import type { createExecutor } from './executor.js';
 import { broadcast } from './ws.js';
 import { handleSkip } from './feedback.js';
 import { cacheCoords } from './triggers.js';
-import { getSongUrl, getSongDetail, setNcmCookie, getNcmCookie, clearNcmCookie, getNcmBase, getLoginStatus, setDefaultBr, QUALITY_LEVELS } from './adapters/netease.js';
+import { getSongUrl, getSongDetail, getSimilarSongs, setNcmCookie, getNcmCookie, clearNcmCookie, getNcmBase, getLoginStatus, setDefaultBr, QUALITY_LEVELS } from './adapters/netease.js';
 import { getCurrentWeatherByCoords, setWeatherKey, hasWeatherKey } from './adapters/weather.js';
 import { setNcmBase } from './adapters/netease.js';
 import { setFeishuConfig } from './adapters/feishu.js';
@@ -713,6 +713,27 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
 
       const item = { songId: String(detail.id), name: detail.name, artist: detail.artist, url };
       res.json(item);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown';
+      res.status(502).json({ error: msg });
+    }
+  });
+
+  app.post('/api/play/similar', async (req: Request, res: Response) => {
+    const { songId } = req.body;
+    if (!songId) return res.status(400).json({ error: 'songId required' });
+
+    try {
+      const songs = await getSimilarSongs(Number(songId));
+      if (!songs.length) return res.json({ songs: [] });
+
+      const items = await Promise.all(songs.map(async (s) => {
+        let url = '';
+        try { url = await getSongUrl(Number(s.id)); } catch { /* best-effort */ }
+        return { songId: String(s.id), name: s.name, artist: s.artist, url };
+      }));
+
+      res.json({ songs: items });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown';
       res.status(502).json({ error: msg });

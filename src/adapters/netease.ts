@@ -141,6 +141,17 @@ export async function getPersonalFM(): Promise<Song | null> {
   };
 }
 
+export async function getSimilarSongs(songId: number): Promise<Song[]> {
+  const data = await ncmFetch<any>(`/simi/song?id=${songId}`);
+  const songs = data?.songs ?? [];
+  return songs.map((s: any) => ({
+    id: s.id,
+    name: s.name,
+    artist: s.artists?.[0]?.name ?? '',
+    album: s.album?.name ?? '',
+  }));
+}
+
 export async function getIntelligenceList(songId: number, playlistId: number): Promise<Song[]> {
   const data = await ncmFetch<any>(`/playmode/intelligence/list?id=${songId}&pid=${playlistId}`);
   const songs = data?.data ?? [];
