@@ -14,7 +14,6 @@ const state = {
   isFmMode: false,
   isSmartMode: false,
   _playlists: [],           // cached playlist list for dropdown
-  _addedToPlaylist: new Set(), // "${pid}-${songId}" pairs to suppress dup toasts
 };
 
 // ── 工具 ──
@@ -1268,12 +1267,21 @@ dom.addToPlaylistBtn.addEventListener('click', async (e) => {
     item.className = 'add-to-playlist-item';
     item.textContent = `${pl.name} (${pl.trackCount})`;
     item.addEventListener('click', async () => {
-      const addedKey = `${pl.id}-${track.songId}`;
-      if (state._addedToPlaylist.has(addedKey)) {
-        showModeToast('已在歌单中');
-        dropdown.style.display = 'none';
-        return;
-      }
+      // First check if song already in playlist (real-time GET)
+      try {
+        const detailRes = await fetch(`/api/ncm/playlist/${pl.id}`);
+        if (detailRes.ok) {
+          const detail = await detailRes.json();
+          const allTrackIds = detail.allTrackIds ?? [];
+          console.log('[add-to-playlist]', { plId: pl.id, songId: track.songId, songIdType: typeof track.songId, allTrackIds, sampleId: allTrackIds[0], sampleType: typeof allTrackIds[0], includes: allTrackIds.includes(Number(track.songId)) });
+          if (allTrackIds.includes(Number(track.songId))) {
+            showModeToast('已在歌单中');
+            dropdown.style.display = 'none';
+            return;
+          }
+        }
+      } catch { /* fall through to POST */ }
+
       try {
         const r = await fetch(`/api/ncm/playlist/${pl.id}/tracks`, {
           method: 'POST',
@@ -1281,14 +1289,8 @@ dom.addToPlaylistBtn.addEventListener('click', async (e) => {
           body: JSON.stringify({ trackIds: [Number(track.songId)] }),
         });
         if (!r.ok) { showModeToast('添加失败'); return; }
-        const data = await r.json();
-        state._addedToPlaylist.add(addedKey);
-        if (data.alreadyExists) {
-          showModeToast('已在歌单中');
-        } else {
-          showModeToast(`已添加到「${pl.name}」`);
-          pl.trackCount++;
-        }
+        showModeToast(`已添加到「${pl.name}」`);
+        pl.trackCount++;
       } catch { showModeToast('添加失败'); }
       dropdown.style.display = 'none';
     });

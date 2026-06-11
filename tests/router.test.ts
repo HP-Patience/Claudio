@@ -29,6 +29,15 @@ vi.mock('../src/context.js', () => ({
   assemblePrompt: vi.fn().mockReturnValue('=== Assembled Prompt ==='),
 }));
 
+vi.mock('../src/adapters/netease.js', () => ({
+  getNcmCookie: vi.fn().mockReturnValue('mock-cookie'),
+  getPlaylistDetail: vi.fn(),
+  addTracksToPlaylist: vi.fn(),
+  getUserPlaylists: vi.fn().mockResolvedValue([]),
+  createPlaylist: vi.fn(),
+  removeTracksFromPlaylist: vi.fn(),
+}));
+
 import { getRecentPlays } from '../src/db.js';
 import { invokeClaude } from '../src/claude.js';
 import { assemblePrompt } from '../src/context.js';
@@ -40,7 +49,6 @@ describe('router', () => {
     vi.clearAllMocks();
     app = createApp({ db: {} as any });
   });
-
   describe('POST /api/chat', () => {
     it('routes simple command locally without calling Claude', async () => {
       const res = await request(app)

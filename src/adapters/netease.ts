@@ -1,6 +1,8 @@
 let BASE = process.env.NCM_API ?? 'http://localhost:3001';
 let COOKIE = '';
 
+import { getCachedTrackIds } from '../playlist-cache.js';
+
 // Bitrate levels (br param for /song/url)
 export const QUALITY_LEVELS = {
   standard: 128000,
@@ -196,16 +198,22 @@ export async function getUserPlaylists(userId: number): Promise<Playlist[]> {
   }));
 }
 
-export async function getPlaylistDetail(playlistId: number): Promise<{ playlist: Playlist; tracks: PlaylistTrack[] }> {
+export async function getPlaylistDetail(playlistId: number): Promise<{ playlist: Playlist; tracks: PlaylistTrack[]; allTrackIds: number[] }> {
   const data = await ncmFetch<any>(`/playlist/detail?id=${playlistId}`);
   const p = data?.playlist ?? {};
   const rawTracks = p.tracks ?? [];
+  const rawTrackIds = p.trackIds ?? [];
+  const apiIds: number[] = rawTrackIds.map((t: any) => (typeof t === 'number' ? t : t.id));
+  // Merge local cache to defeat NetEase server-side caching
+  const cachedIds = getCachedTrackIds(playlistId);
+  const merged = new Set([...apiIds, ...cachedIds]);
+  console.log('[getPlaylistDetail]', { playlistId, apiCount: apiIds.length, cachedCount: cachedIds.length, mergedSize: merged.size });
   return {
     playlist: {
       id: p.id,
       name: p.name,
       description: p.description ?? '',
-      trackCount: p.trackCount ?? 0,
+      trackCount: Math.max(p.trackCount ?? 0, merged.size),
       coverImgUrl: p.coverImgUrl ?? '',
       creator: { nickname: p.creator?.nickname ?? '' },
     },
@@ -216,6 +224,7 @@ export async function getPlaylistDetail(playlistId: number): Promise<{ playlist:
       album: t.al?.name ?? '',
       duration: t.dt ?? 0,
     })),
+    allTrackIds: [...merged],
   };
 }
 
