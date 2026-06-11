@@ -13,6 +13,8 @@ const state = {
   ncmNickname: '',
   isFmMode: false,
   isSmartMode: false,
+  playMode: localStorage.getItem('claudio-playmode') || 'list',
+  _shuffleHistory: [],
   _playlists: [],           // cached playlist list for dropdown
 };
 
@@ -107,6 +109,8 @@ const dom = {
   playlistsPanel: $('#playlists-panel'),
   addToPlaylistBtn: $('#add-to-playlist-btn'),
   addToPlaylistDropdown: $('#add-to-playlist-dropdown'),
+  playModeBtn: $('#playmode-btn'),
+  playModeDropdown: $('#playmode-dropdown'),
   playlistCreateModal: $('#playlist-create-modal'),
   playlistCreateClose: $('#playlist-create-close'),
   playlistCreateCancel: $('#playlist-create-cancel'),
@@ -169,6 +173,8 @@ audio.addEventListener('ended', () => {
     fetchNextFm();
   } else if (state.isSmartMode && state.queue.length > 1) {
     nextTrack();
+  } else if (state.playMode === 'single') {
+    replayCurrentTrack();
   } else {
     state.isSmartMode = false;
     updateModeDisplay();
@@ -509,6 +515,7 @@ function togglePlay() {
 function getQueue() { return state.queue; }
 function setQueue(items) {
   state.queue = items;
+  state._shuffleHistory = [];
   dom.queueCount.textContent = String(items.length);
   refreshQueuePanel();
 }
@@ -523,6 +530,14 @@ function updateModeDisplay() {
   } else {
     dom.playerStatus.textContent = 'READY';
   }
+  updatePlayModeUI();
+}
+
+const PLAY_MODE_LABELS = { list: '\u{1F4CB}', single: '\u{1F501}', shuffle: '\u{1F500}' };
+function updatePlayModeUI() {
+  const disabled = state.isFmMode || state.isSmartMode;
+  dom.playModeBtn.textContent = PLAY_MODE_LABELS[state.playMode] || PLAY_MODE_LABELS.list;
+  dom.playModeBtn.classList.toggle('disabled', disabled);
 }
 
 function showModeToast(label) {
@@ -570,7 +585,25 @@ async function fetchNextFm() {
 async function nextTrack() {
   if (state.isFmMode) {
     await fetchNextFm();
-  } else if (state.queue.length > 1) {
+    return;
+  }
+  if (state.queue.length === 0) return;
+  if (!state.isSmartMode && state.playMode === 'single') {
+    replayCurrentTrack();
+    return;
+  }
+  if (!state.isSmartMode && state.playMode === 'shuffle' && state.queue.length > 1) {
+    state._shuffleHistory.push(state.queue[0]);
+    const rndIdx = 1 + Math.floor(Math.random() * (state.queue.length - 1));
+    const next = state.queue.splice(rndIdx, 1)[0];
+    state.queue.unshift(next);
+    await resolveItemUrl(state.queue[0]);
+    playTrack(state.queue[0]);
+    dom.queueCount.textContent = String(state.queue.length);
+    renderQueuePanel();
+    return;
+  }
+  if (state.queue.length > 1) {
     const next = state.queue.shift();
     state.queue.push(next);
     await resolveItemUrl(state.queue[0]);
@@ -583,7 +616,29 @@ async function nextTrack() {
 async function prevTrack() {
   if (state.isFmMode) {
     await fetchNextFm();
-  } else if (state.queue.length > 1) {
+    return;
+  }
+  if (state.queue.length === 0) return;
+  if (!state.isSmartMode && state.playMode === 'single') {
+    replayCurrentTrack();
+    return;
+  }
+  if (!state.isSmartMode && state.playMode === 'shuffle') {
+    if (state._shuffleHistory.length > 0) {
+      const prev = state._shuffleHistory.pop();
+      const dupIdx = state.queue.findIndex(t => t.songId === prev.songId && t.name === prev.name);
+      if (dupIdx >= 0) state.queue.splice(dupIdx, 1);
+      state.queue.unshift(prev);
+      await resolveItemUrl(state.queue[0]);
+      playTrack(state.queue[0]);
+      dom.queueCount.textContent = String(state.queue.length);
+      renderQueuePanel();
+    } else {
+      replayCurrentTrack();
+    }
+    return;
+  }
+  if (state.queue.length > 1) {
     const prev = state.queue.pop();
     state.queue.unshift(prev);
     await resolveItemUrl(state.queue[0]);
@@ -591,6 +646,22 @@ async function prevTrack() {
     dom.queueCount.textContent = String(state.queue.length);
     renderQueuePanel();
   }
+}
+
+function replayCurrentTrack() {
+  if (!state.currentTrack || !state.currentTrack.url) return;
+  audio.currentTime = 0;
+  audio.play().catch(() => {});
+  dom.onAir.classList.add('active');
+  dom.playBtn.textContent = '⏸';
+}
+
+function setPlayMode(mode) {
+  state.playMode = mode;
+  if (mode !== 'shuffle') state._shuffleHistory = [];
+  localStorage.setItem('claudio-playmode', mode);
+  updatePlayModeUI();
+  dom.playModeDropdown.style.display = 'none';
 }
 
 function playTrack(item) {
@@ -1298,10 +1369,40 @@ dom.addToPlaylistBtn.addEventListener('click', async (e) => {
   }
 });
 
+// ── Play mode ──
+dom.playModeBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (state.isFmMode || state.isSmartMode) return;
+  const dd = dom.playModeDropdown;
+  dd.style.display = dd.style.display !== 'none' ? 'none' : '';
+  if (dd.style.display !== 'none') buildPlayModeDropdown();
+});
+
+function buildPlayModeDropdown() {
+  const dd = dom.playModeDropdown;
+  dd.innerHTML = '';
+  const modes = [
+    { key: 'list', label: '\u{1F4CB} 列表播放' },
+    { key: 'single', label: '\u{1F501} 单曲循环' },
+    { key: 'shuffle', label: '\u{1F500} 随机播放' },
+  ];
+  for (const m of modes) {
+    const item = document.createElement('div');
+    item.className = 'playmode-item';
+    if (m.key === state.playMode) item.classList.add('active');
+    item.textContent = m.label;
+    item.addEventListener('click', () => setPlayMode(m.key));
+    dd.appendChild(item);
+  }
+}
+
 // Close dropdown on outside click
 document.addEventListener('click', (e) => {
   if (dom.addToPlaylistDropdown && !dom.addToPlaylistBtn.contains(e.target) && !dom.addToPlaylistDropdown.contains(e.target)) {
     dom.addToPlaylistDropdown.style.display = 'none';
+  }
+  if (dom.playModeDropdown && !dom.playModeBtn.contains(e.target) && !dom.playModeDropdown.contains(e.target)) {
+    dom.playModeDropdown.style.display = 'none';
   }
 });
 
@@ -1409,6 +1510,7 @@ async function init() {
     addChatMessage('你好！我是 Claudio，你的私人 AI 电台 DJ。想听什么？', 'ai');
   }
 
+  updatePlayModeUI();
   connectWs();
 
   // deferred play on first user interaction (browser blocks autoplay)

@@ -864,6 +864,28 @@ select.form-input { appearance: auto; cursor: pointer; }
   text-align: center;
 }
 
+/* play mode */
+.playmode-wrap {
+  position: relative;
+}
+#playmode-btn.disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+.playmode-dropdown {
+  position: absolute; bottom: calc(100% + 4px); right: 0;
+  min-width: 130px; z-index: 100;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); box-shadow: 0 4px 16px rgba(0,0,0,.4);
+}
+.playmode-item {
+  padding: 8px 12px; font-size: 12px; cursor: pointer;
+  white-space: nowrap; transition: background .15s;
+}
+.playmode-item:hover { background: var(--bg-hover); color: var(--accent); }
+.playmode-item:not(:last-child) { border-bottom: 1px solid var(--border); }
+.playmode-item.active { color: var(--accent); font-weight: 600; }
+
 /* Create playlist modal extras */
 .playlist-privacy {
   margin-top: 8px;
