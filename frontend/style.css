@@ -172,19 +172,46 @@ body {
 .player-status { font-size: 10px; color: var(--text-muted); margin-top: 1px; font-family: var(--font-mono); letter-spacing: .05em; }
 
 .player-controls { display: flex; align-items: center; gap: 4px; }
+.transport-bar { display: flex; align-items: center; margin-top: 6px; }
+.transport-left { display: flex; align-items: center; gap: 2px; flex: 1; justify-content: flex-start; }
+.transport-center {
+  display: flex; align-items: center; gap: 2px;
+  justify-content: center;
+  padding: 3px 6px;
+  border-radius: 12px;
+  transition: background .25s;
+}
+.transport-right { display: flex; align-items: center; gap: 4px; flex: 1; justify-content: flex-end; }
 .ctrl-btn {
   width: 30px; height: 30px;
   display: flex; align-items: center; justify-content: center;
-  border: none; border-radius: var(--radius-sm);
+  border: none; border-radius: 8px;
   background: transparent; color: var(--text-secondary);
-  font-size: 13px; cursor: pointer; transition: all .2s;
+  font-size: 13px; cursor: pointer;
+  transition: all .18s ease;
 }
-.ctrl-btn:hover { background: var(--bg-hover); color: var(--accent); }
+.ctrl-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+  transform: scale(1.12);
+}
+.ctrl-btn:active {
+  transform: scale(0.92);
+  transition-duration: .06s;
+}
+.ctrl-btn svg {
+  display: block;
+}
+.ctrl-btn.active {
+  color: var(--accent);
+  background: var(--accent-glow);
+}
 .ctrl-btn.text {
   width: auto; padding: 0 8px;
   font-size: 10px; letter-spacing: .08em;
   font-family: var(--font-mono);
 }
+
 #fm-btn {
   width: auto; padding: 0 6px;
   font-size: 10px; letter-spacing: 0.1em;
@@ -202,6 +229,9 @@ body {
 
 #love-btn.loved { color: #e8456b; }
 #love-btn.loved:hover { color: #ff6b8a; }
+#love-btn.loved svg {
+  filter: drop-shadow(0 0 6px rgba(232, 69, 107, 0.5));
+}
 
 #hide-btn:active { color: var(--accent); }
 
@@ -249,6 +279,42 @@ body {
   display: flex; justify-content: space-between;
   font-size: 10px; color: var(--text-muted); margin-top: 4px;
   font-family: var(--font-mono);
+}
+
+/* ── Lyrics ── */
+.lyrics-container {
+  text-align: center;
+  padding: 10px 24px 6px;
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: opacity .3s;
+}
+.lyrics-container.empty {
+  display: none;
+}
+.lyric-line {
+  transition: opacity .25s, font-size .25s, color .25s;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.lyric-line.prev,
+.lyric-line.next {
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0.35;
+}
+.lyric-line.curr {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  opacity: 1;
 }
 
 /* ── Arc Indicator ── */
@@ -514,6 +580,13 @@ body {
 }
 
 .form-group { display: flex; flex-direction: column; gap: 6px; }
+.toggle-group { flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; }
+.toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; cursor: pointer; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; inset: 0; background: var(--bg-hover); border-radius: 24px; transition: .2s; }
+.toggle-slider::before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: var(--text-muted); border-radius: 50%; transition: .2s; }
+.toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); background: #fff; }
 .input-row { display: flex; gap: 6px; align-items: center; }
 .input-row .form-input { flex: 1; }
 .form-btn-small {
@@ -727,7 +800,7 @@ select.form-input { appearance: auto; cursor: pointer; }
 /* ── Playlists ── */
 .playlists-panel {
   display: flex; flex-direction: column; gap: 8px;
-  padding: 12px; min-height: 0; overflow: hidden;
+  padding: 12px; min-height: 0; overflow-y: auto;
 }
 
 .playlist-create-bar {
@@ -881,7 +954,9 @@ select.form-input { appearance: auto; cursor: pointer; }
 .playmode-item {
   padding: 8px 12px; font-size: 12px; cursor: pointer;
   white-space: nowrap; transition: background .15s;
+  display: flex; align-items: center; gap: 8px;
 }
+.playmode-item svg { flex-shrink: 0; }
 .playmode-item:hover { background: var(--bg-hover); color: var(--accent); }
 .playmode-item:not(:last-child) { border-bottom: 1px solid var(--border); }
 .playmode-item.active { color: var(--accent); font-weight: 600; }

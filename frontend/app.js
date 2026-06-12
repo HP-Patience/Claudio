@@ -15,6 +15,9 @@ const state = {
   isSmartMode: false,
   playMode: localStorage.getItem('claudio-playmode') || 'list',
   _shuffleHistory: [],
+  currentLyrics: [],
+  currentLyricIndex: -1,
+  lyricsVisible: true,
   _playlists: [],           // cached playlist list for dropdown
 };
 
@@ -46,6 +49,7 @@ const dom = {
   playBtn: $('#play-btn'),
   prevBtn: $('#prev-btn'),
   nextBtn: $('#next-btn'),
+  lyricToggleBtn: $('#lyric-toggle-btn'),
   fmBtn: $('#fm-btn'),
   smartBtn: $('#smart-btn'),
   progress: $('.progress-container'),
@@ -69,6 +73,7 @@ const dom = {
   settingsApiKey: $('#settings-api-key'),
   settingsBaseUrl: $('#settings-base-url'),
   settingsApiModel: $('#settings-api-model'),
+  settingsLlmEnabled: $('#settings-llm-enabled'),
   settingsFetchModels: $('#settings-fetch-models'),
   modelDropdown: $('#model-dropdown'),
   settingsNcmApi: $('#settings-ncm-api'),
@@ -118,7 +123,33 @@ const dom = {
   playlistName: $('#playlist-name'),
   playlistPrivate: $('#playlist-private'),
   playlistCreateStatus: $('#playlist-create-status'),
+  lyricsContainer: $('#lyrics-container'),
+  lyricPrev: $('#lyric-prev'),
+  lyricCurr: $('#lyric-curr'),
+  lyricNext: $('#lyric-next'),
 };
+
+// ── SVG Icons (Feather style) ──
+const ICONS = {
+  play: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
+  'skip-back': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>',
+  'skip-forward': '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>',
+  heart: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+  'heart-filled': '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+  'message-circle': '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+  list: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
+  repeat: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
+  shuffle: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>',
+  single: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><text x="12" y="14.5" text-anchor="middle" font-size="11" fill="currentColor" stroke="none">1</text></svg>',
+};
+
+// Init icon buttons
+dom.playBtn.innerHTML = ICONS.play;
+dom.prevBtn.innerHTML = ICONS['skip-back'];
+dom.nextBtn.innerHTML = ICONS['skip-forward'];
+dom.loveBtn.innerHTML = ICONS.heart;
+dom.lyricToggleBtn.innerHTML = ICONS['message-circle'];
 
 // ── audio ──
 const audio = new Audio();
@@ -163,11 +194,12 @@ audio.addEventListener('timeupdate', () => {
     dom.currentTime.textContent = formatTime(audio.currentTime);
     dom.duration.textContent = formatTime(audio.duration);
   }
+  updateLyrics(audio.currentTime);
 });
 
 audio.addEventListener('ended', () => {
   state.isPlaying = false;
-  dom.playBtn.textContent = '▶';
+  dom.playBtn.innerHTML = ICONS.play;
   dom.onAir.classList.remove('active');
   if (state.isFmMode) {
     fetchNextFm();
@@ -184,13 +216,13 @@ audio.addEventListener('ended', () => {
 
 audio.addEventListener('play', () => {
   state.isPlaying = true;
-  dom.playBtn.textContent = '⏸';
+  dom.playBtn.innerHTML = ICONS.pause;
   dom.waveform.classList.remove('paused');
 });
 
 audio.addEventListener('pause', () => {
   state.isPlaying = false;
-  dom.playBtn.textContent = '▶';
+  dom.playBtn.innerHTML = ICONS.play;
   dom.waveform.classList.add('paused');
 });
 
@@ -200,12 +232,63 @@ function formatTime(s) {
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
+function parseLRC(lrcText) {
+  if (!lrcText || !lrcText.trim()) return [];
+  const lines = lrcText.split('\n');
+  const result = [];
+  const lineRe = /^\[(\d{2}):(\d{2})(?:[\.:](\d{2,3}))?\](.*)/;
+  for (const line of lines) {
+    const m = line.match(lineRe);
+    if (!m) continue;
+    const text = m[4].trim();
+    if (!text) continue;
+    const mins = parseInt(m[1], 10);
+    const secs = parseInt(m[2], 10);
+    const ms = parseInt(m[3] || '0', 10);
+    const time = mins * 60 + secs + ms / (m[3] && m[3].length === 3 ? 1000 : 100);
+    result.push({ time, text });
+  }
+  result.sort((a, b) => a.time - b.time);
+  return result;
+}
+
+function updateLyrics(currentTime) {
+  const lyrics = state.currentLyrics;
+  const container = dom.lyricsContainer;
+  if (!lyrics.length) {
+    container.classList.add('empty');
+    return;
+  }
+  // binary search: first line with time > currentTime
+  let lo = 0, hi = lyrics.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (lyrics[mid].time > currentTime) hi = mid;
+    else lo = mid + 1;
+  }
+  const idx = lo - 1; // current line index
+  if (idx === state.currentLyricIndex) return; // unchanged
+  state.currentLyricIndex = idx;
+
+  container.classList.remove('empty');
+  dom.lyricPrev.textContent = idx >= 1 ? lyrics[idx - 1].text : '';
+  dom.lyricCurr.textContent = idx >= 0 ? lyrics[idx].text : '';
+  dom.lyricNext.textContent = idx >= 0 && idx < lyrics.length - 1 ? lyrics[idx + 1].text : '';
+}
+
 // ── player controls ──
 dom.playBtn.addEventListener('click', () => togglePlay());
 dom.prevBtn.addEventListener('click', () => prevTrack());
 dom.nextBtn.addEventListener('click', () => nextTrack());
 
+dom.lyricToggleBtn.addEventListener('click', () => {
+  state.lyricsVisible = !state.lyricsVisible;
+  dom.lyricsContainer.style.display = state.lyricsVisible ? '' : 'none';
+  dom.lyricToggleBtn.classList.toggle('active', state.lyricsVisible);
+});
+
 dom.fmBtn.addEventListener('click', async () => {
+  if (state.isFmMode) { await exitMode(); return; }
   try {
     const res = await fetch('/api/play/fm/start', { method: 'POST' });
     if (!res.ok) showModeToast('FM 启动失败');
@@ -213,6 +296,7 @@ dom.fmBtn.addEventListener('click', async () => {
 });
 
 dom.smartBtn.addEventListener('click', async () => {
+  if (state.isSmartMode) { await exitMode(); return; }
   const track = state.currentTrack;
   if (!track || !track.songId) { showModeToast('请先播放一首歌'); return; }
   try {
@@ -240,11 +324,11 @@ dom.loveBtn.addEventListener('click', async () => {
     const data = await res.json();
     if (data.loved) {
       state.lovedSongs.add(track.songId);
-      dom.loveBtn.textContent = '♥';
+      dom.loveBtn.innerHTML = ICONS['heart-filled'];
       dom.loveBtn.classList.add('loved');
     } else {
       state.lovedSongs.delete(track.songId);
-      dom.loveBtn.textContent = '♡';
+      dom.loveBtn.innerHTML = ICONS.heart;
       dom.loveBtn.classList.remove('loved');
     }
   } catch { /* ignore */ }
@@ -387,7 +471,7 @@ function renderQueuePanel() {
           audio.src = '';
           state.currentTrack = null;
           state.isPlaying = false;
-          dom.playBtn.textContent = '▶';
+          dom.playBtn.innerHTML = ICONS.play;
           dom.onAir.classList.remove('active');
           dom.nowPlaying.textContent = 'Claudio';
           dom.waveform.classList.add('paused');
@@ -464,7 +548,7 @@ async function renderFavsPanel() {
 
       const rmBtn = document.createElement('button');
       rmBtn.className = 'track-action';
-      rmBtn.textContent = '♥';
+      rmBtn.innerHTML = ICONS['heart-filled'];
       rmBtn.title = 'Remove favorite';
       rmBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -475,7 +559,7 @@ async function renderFavsPanel() {
         });
         state.lovedSongs.delete(fav.song_id);
         if (state.currentTrack?.songId === fav.song_id) {
-          dom.loveBtn.textContent = '♡';
+          dom.loveBtn.innerHTML = ICONS.heart;
           dom.loveBtn.classList.remove('loved');
         }
         renderFavsPanel();
@@ -533,10 +617,10 @@ function updateModeDisplay() {
   updatePlayModeUI();
 }
 
-const PLAY_MODE_LABELS = { list: '\u{1F4CB}', single: '\u{1F501}', shuffle: '\u{1F500}' };
+const PLAY_MODE_LABELS = { list: ICONS.list, single: ICONS.repeat, shuffle: ICONS.shuffle };
 function updatePlayModeUI() {
   const disabled = state.isFmMode || state.isSmartMode;
-  dom.playModeBtn.textContent = PLAY_MODE_LABELS[state.playMode] || PLAY_MODE_LABELS.list;
+  dom.playModeBtn.innerHTML = PLAY_MODE_LABELS[state.playMode] || PLAY_MODE_LABELS.list;
   dom.playModeBtn.classList.toggle('disabled', disabled);
 }
 
@@ -580,6 +664,14 @@ async function fetchNextFm() {
   } finally {
     _fetchingFm = false;
   }
+}
+
+async function exitMode() {
+  try { await fetch('/api/play/mode/exit', { method: 'POST' }); } catch { /* ok */ }
+  state.isFmMode = false;
+  state.isSmartMode = false;
+  updateModeDisplay();
+  showModeToast('已退出');
 }
 
 async function nextTrack() {
@@ -653,7 +745,7 @@ function replayCurrentTrack() {
   audio.currentTime = 0;
   audio.play().catch(() => {});
   dom.onAir.classList.add('active');
-  dom.playBtn.textContent = '⏸';
+  dom.playBtn.innerHTML = ICONS.pause;
 }
 
 function setPlayMode(mode) {
@@ -675,10 +767,10 @@ function playTrack(item) {
 
   // sync love button
   if (item.songId && state.lovedSongs.has(item.songId)) {
-    dom.loveBtn.textContent = '♥';
+    dom.loveBtn.innerHTML = ICONS['heart-filled'];
     dom.loveBtn.classList.add('loved');
   } else {
-    dom.loveBtn.textContent = '♡';
+    dom.loveBtn.innerHTML = ICONS.heart;
     dom.loveBtn.classList.remove('loved');
   }
 
@@ -692,6 +784,21 @@ function playTrack(item) {
     } else {
       dom.arcIndicator.style.display = 'none';
     }
+  }
+
+  // fetch lyrics
+  state.currentLyrics = [];
+  state.currentLyricIndex = -1;
+  dom.lyricsContainer.classList.add('empty');
+  if (item.songId) {
+    fetch(`/api/lyric?songId=${item.songId}`)
+      .then(r => r.json())
+      .then(data => {
+        state.currentLyrics = parseLRC(data.lyric);
+        state.currentLyricIndex = -1;
+        updateLyrics(audio.currentTime);
+      })
+      .catch(() => {});
   }
 }
 
@@ -848,6 +955,11 @@ function connectWs() {
           if (msg.payload?.text) {
             addChatMessage(msg.payload.text, 'ai');
           }
+          break;
+        case 'mode_exit':
+          state.isFmMode = false;
+          state.isSmartMode = false;
+          updateModeDisplay();
           break;
         case 'token_usage':
           if (msg.payload) {
@@ -1382,15 +1494,15 @@ function buildPlayModeDropdown() {
   const dd = dom.playModeDropdown;
   dd.innerHTML = '';
   const modes = [
-    { key: 'list', label: '\u{1F4CB} 列表播放' },
-    { key: 'single', label: '\u{1F501} 单曲循环' },
-    { key: 'shuffle', label: '\u{1F500} 随机播放' },
+    { key: 'list', label: '列表播放' },
+    { key: 'single', label: '单曲循环' },
+    { key: 'shuffle', label: '随机播放' },
   ];
   for (const m of modes) {
     const item = document.createElement('div');
     item.className = 'playmode-item';
     if (m.key === state.playMode) item.classList.add('active');
-    item.textContent = m.label;
+    item.innerHTML = (ICONS[m.key] || '') + ' <span>' + m.label + '</span>';
     item.addEventListener('click', () => setPlayMode(m.key));
     dd.appendChild(item);
   }
@@ -1815,8 +1927,9 @@ async function loadConfig() {
     const res = await fetch('/api/config');
     const data = await res.json();
     dom.settingsApiKey.value = data.apiKey || '';
-    dom.settingsBaseUrl.value = data.baseUrl || 'https://api.anthropic.com';
+    dom.settingsBaseUrl.value = data.baseUrl || 'https://api.deepseek.com';
     dom.settingsApiModel.value = data.apiModel || '';
+    dom.settingsLlmEnabled.checked = data.llmEnabled !== false;
     dom.settingsNcmApi.value = data.ncmApi || 'http://localhost:3001';
     dom.settingsNcmQuality.value = data.ncmQuality || '';
     dom.settingsWeatherKey.value = data.weatherKey || '';
@@ -1923,6 +2036,7 @@ dom.settingsSave.addEventListener('click', async () => {
         apiKey: dom.settingsApiKey.value,
         baseUrl: dom.settingsBaseUrl.value,
         apiModel: dom.settingsApiModel.value,
+        llmEnabled: dom.settingsLlmEnabled.checked,
         ncmApi: dom.settingsNcmApi.value,
         ncmQuality: dom.settingsNcmQuality.value,
         weatherKey: dom.settingsWeatherKey.value,

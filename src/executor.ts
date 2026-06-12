@@ -105,6 +105,7 @@ export function createExecutor() {
     },
 
     stopFM: () => { state.isFmMode = false; },
+    exitMode: () => { state.isFmMode = false; },
 
     startIntelligence: async (songId: number, playlistId?: number): Promise<PlayItem[]> => {
       const songs = await getIntelligenceList(songId, playlistId ?? 0);

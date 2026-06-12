@@ -57,26 +57,33 @@
           </div>
           <div class="player-status">READY</div>
         </div>
-        <div class="player-controls">
-          <button class="ctrl-btn" id="prev-btn" title="上一首">⏮</button>
-          <button class="ctrl-btn" id="play-btn" title="播放/暂停">▶</button>
-          <button class="ctrl-btn" id="next-btn" title="下一首">⏭</button>
-          <button class="ctrl-btn" id="fm-btn" title="私人FM">FM</button>
-          <button class="ctrl-btn" id="smart-btn" title="心动模式">SMART</button>
-          <button class="ctrl-btn" id="love-btn" title="收藏">♡</button>
-          <button class="ctrl-btn text" id="hide-btn" title="隐藏">HIDE</button>
-          <button class="ctrl-btn text" id="similar-btn" title="相似推荐">相似</button>
-          <div class="add-to-playlist-wrap">
-            <button class="ctrl-btn text" id="add-to-playlist-btn" title="添加到歌单">+LIST</button>
-            <div class="add-to-playlist-dropdown" id="add-to-playlist-dropdown" style="display:none"></div>
-          </div>
-          <div class="playmode-wrap">
-            <button class="ctrl-btn" id="playmode-btn" title="播放模式">📋</button>
-            <div class="playmode-dropdown" id="playmode-dropdown" style="display:none"></div>
-          </div>
-          <input type="range" id="volume" min="0" max="100" value="80" title="音量" />
-        </div>
       </div>
+      <div class="transport-bar">
+          <div class="transport-left">
+            <button class="ctrl-btn" id="fm-btn" title="私人FM">FM</button>
+            <button class="ctrl-btn" id="smart-btn" title="心动模式">SMART</button>
+          </div>
+          <div class="transport-center">
+            <button class="ctrl-btn" id="love-btn" title="收藏"></button>
+            <div class="playmode-wrap">
+              <button class="ctrl-btn" id="playmode-btn" title="播放模式"></button>
+              <div class="playmode-dropdown" id="playmode-dropdown" style="display:none"></div>
+            </div>
+            <button class="ctrl-btn" id="prev-btn" title="上一首"></button>
+            <button class="ctrl-btn" id="play-btn" title="播放/暂停"></button>
+            <button class="ctrl-btn" id="next-btn" title="下一首"></button>
+            <button class="ctrl-btn" id="lyric-toggle-btn" title="歌词"></button>
+          </div>
+          <div class="transport-right">
+            <button class="ctrl-btn text" id="hide-btn" title="隐藏">HIDE</button>
+            <button class="ctrl-btn text" id="similar-btn" title="相似推荐">相似</button>
+            <div class="add-to-playlist-wrap">
+              <button class="ctrl-btn text" id="add-to-playlist-btn" title="添加到歌单">+LIST</button>
+              <div class="add-to-playlist-dropdown" id="add-to-playlist-dropdown" style="display:none"></div>
+            </div>
+            <input type="range" id="volume" min="0" max="100" value="80" title="音量" />
+          </div>
+        </div>
       <div class="player-bottom">
         <div class="progress-container">
           <div id="progress-bar" style="width:0%"></div>
@@ -86,6 +93,12 @@
           <span id="duration">0:00</span>
         </div>
           <div class="arc-indicator" id="arc-indicator" style="display:none"></div>
+      </div>
+
+      <div class="lyrics-container empty" id="lyrics-container">
+        <div class="lyric-line prev" id="lyric-prev"></div>
+        <div class="lyric-line curr" id="lyric-curr"></div>
+        <div class="lyric-line next" id="lyric-next"></div>
       </div>
     </section>
 
@@ -142,14 +155,14 @@
       </div>
       <div class="modal-body">
         <fieldset class="form-fieldset">
-          <legend class="form-legend">Anthropic</legend>
+          <legend class="form-legend">LLM</legend>
           <div class="form-group">
             <label class="form-label" for="settings-api-key">API Key</label>
-            <input type="text" id="settings-api-key" class="form-input" placeholder="sk-ant-..." autocomplete="off" />
+            <input type="text" id="settings-api-key" class="form-input" placeholder="sk-..." autocomplete="off" />
           </div>
           <div class="form-group">
             <label class="form-label" for="settings-base-url">Base URL</label>
-            <input type="url" id="settings-base-url" class="form-input" placeholder="https://api.anthropic.com" autocomplete="off" />
+            <input type="url" id="settings-base-url" class="form-input" placeholder="https://api.deepseek.com" autocomplete="off" />
           </div>
           <div class="form-group">
             <label class="form-label" for="settings-api-model">Model</label>
@@ -160,6 +173,14 @@
                 <div class="model-dropdown" id="model-dropdown"></div>
               </div>
             </div>
+          </div>
+          <div class="form-group toggle-group" style="margin-top:8px">
+            <label class="form-label" for="settings-llm-enabled">启用 LLM</label>
+            <label class="toggle-switch">
+              <input type="checkbox" id="settings-llm-enabled" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
         </fieldset>
 
         <fieldset class="form-fieldset">

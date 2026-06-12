@@ -10,7 +10,7 @@ import type { createExecutor } from './executor.js';
 import { broadcast } from './ws.js';
 import { handleSkip } from './feedback.js';
 import { cacheCoords } from './triggers.js';
-import { getSongUrl, getSongDetail, getSimilarSongs, setNcmCookie, getNcmCookie, clearNcmCookie, getNcmBase, getLoginStatus, setDefaultBr, QUALITY_LEVELS, getUserPlaylists, getPlaylistDetail, createPlaylist, addTracksToPlaylist, removeTracksFromPlaylist } from './adapters/netease.js';
+import { getSongUrl, getSongDetail, getSimilarSongs, setNcmCookie, getNcmCookie, clearNcmCookie, getNcmBase, getLoginStatus, setDefaultBr, QUALITY_LEVELS, getUserPlaylists, getPlaylistDetail, createPlaylist, addTracksToPlaylist, removeTracksFromPlaylist, getLyric } from './adapters/netease.js';
 import { getCurrentWeatherByCoords, setWeatherKey, hasWeatherKey } from './adapters/weather.js';
 import { setNcmBase } from './adapters/netease.js';
 import { addCachedTrackIds, removeCachedTrackIds } from './playlist-cache.js';
@@ -119,6 +119,14 @@ export function createApp(opts: RouterOptions = {}): Express {
     if (classifyIntent(text) === 'simple') {
       if (opts.db) addMessage(opts.db, { role: 'user', content: text });
       res.json({ talk: false, claude: false, action: text.trim() });
+      return;
+    }
+
+    // Check if LLM is enabled
+    const llmEnabled = opts.db ? getPref(opts.db, 'llm_enabled') : 'true';
+    if (llmEnabled === 'false') {
+      if (opts.db) addMessage(opts.db, { role: 'user', content: text });
+      res.json({ talk: true, claude: false, say: 'LLM 已禁用，请在设置中启用。' });
       return;
     }
 
@@ -345,12 +353,13 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     const userCorpusDir = env.USER_CORPUS_DIR || getPref(opts.db, 'user_corpus_dir') || '';
     const ncmLoggedIn = !!getNcmCookie();
     const ncmQuality = env.NCM_QUALITY || getPref(opts.db, 'ncm_quality') || '';
-    res.json({ apiKey, baseUrl, apiModel, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir, ncmLoggedIn, ncmQuality });
+    const llmEnabled = getPref(opts.db, 'llm_enabled');
+    res.json({ apiKey, baseUrl, apiModel, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir, ncmLoggedIn, ncmQuality, llmEnabled: llmEnabled !== 'false' });
   });
 
   app.post('/api/config', (req: Request, res: Response) => {
     if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
-    const { apiKey, baseUrl, apiModel, ncmApi, ncmQuality, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir } = req.body;
+    const { apiKey, baseUrl, apiModel, ncmApi, ncmQuality, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir, llmEnabled } = req.body;
     // Secrets: skip empty or masked values to avoid overwriting with placeholder
     if (apiKey !== undefined && apiKey !== '' && !apiKey.includes('*')) {
       setPref(opts.db, 'api_key', apiKey);
@@ -376,6 +385,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     if (feishuAppId !== undefined) setPref(opts.db, 'feishu_app_id', feishuAppId);
     if (upnpDevices !== undefined) setPref(opts.db, 'upnp_devices', upnpDevices);
     if (userCorpusDir !== undefined) setPref(opts.db, 'user_corpus_dir', userCorpusDir);
+    if (llmEnabled !== undefined) setPref(opts.db, 'llm_enabled', llmEnabled ? 'true' : 'false');
 
     syncEnvFile({ ncmApi, ncmQuality, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir });
 
@@ -794,6 +804,12 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     }
   });
 
+  app.post('/api/play/mode/exit', async (_req: Request, res: Response) => {
+    if (opts.executor) opts.executor.exitMode();
+    broadcast('mode_exit', {});
+    res.json({ ok: true });
+  });
+
   app.post('/api/play/by-id', async (req: Request, res: Response) => {
     const { songId } = req.body;
     if (!songId) return res.status(400).json({ error: 'songId required' });
@@ -810,6 +826,17 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown';
       res.status(502).json({ error: msg });
+    }
+  });
+
+  app.get('/api/lyric', async (req: Request, res: Response) => {
+    const songId = Number(req.query.songId);
+    if (!songId) return res.status(400).json({ error: 'songId required' });
+    try {
+      const lyric = await getLyric(songId);
+      res.json({ lyric });
+    } catch {
+      res.json({ lyric: '' });
     }
   });
 
