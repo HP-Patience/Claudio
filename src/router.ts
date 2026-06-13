@@ -1,5 +1,5 @@
 import express from 'express';
-import type { Express, Request, Response } from 'express';
+import type { Express, Request, Response, NextFunction } from 'express';
 import type Database from 'better-sqlite3';
 import { getRecentPlays, getPlan, addMessage, getMessages, getPref, setPref, addFavorite, removeFavorite, isFavorite, getFavorites, addHiddenSong, getPlayStats, getPlayStatsAll } from './db.js';
 import { invokeClaude } from './claude.js';
@@ -17,6 +17,7 @@ import { addCachedTrackIds, removeCachedTrackIds } from './playlist-cache.js';
 import { setFeishuConfig } from './adapters/feishu.js';
 import { setUpnpDevices } from './adapters/upnp.js';
 import { setFishKey } from './tts.js';
+import { AppError, errorMiddleware } from './errors.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
@@ -112,7 +113,7 @@ export function createApp(opts: RouterOptions = {}): Express {
   const app = express();
   app.use(express.json());
 
-  app.post('/api/chat', async (req: Request, res: Response) => {
+  app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) => {
     try {
     const { text } = req.body;
 
@@ -148,8 +149,8 @@ export function createApp(opts: RouterOptions = {}): Express {
         weather = ctx.weather;
         calendar = ctx.calendar;
       } catch {
-        // fallback to empty
-      }
+          console.warn('[chat] getContext failed, using empty context');
+        }
     }
 
     const history = opts.db ? getMessages(opts.db, 10).reverse() : [];
@@ -231,7 +232,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
             }
           }
         } catch {
-          // FM offline
+          console.warn('[chat] FM start failed');
         }
       } else if (result.play_mode === 'intelligence' && result.play_mode_params) {
         try {
@@ -249,7 +250,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
             }
           }
         } catch {
-          // intelligence offline
+          console.warn('[chat] intelligence start failed');
         }
       }
     } else if (opts.executor && result.play && result.play.length > 0) {
@@ -266,7 +267,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
           // Broadcast play event to all WebSocket clients
           broadcast('play', { tracks: playedItems, arc: result.arc });
         } catch {
-          // netease API offline — skip play
+          console.warn('[chat] executePlay failed');
         }
       }
     }
@@ -309,7 +310,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     res.json({ queue: ps.queue, current: ps.currentSong });
   });
 
-  app.get('/api/queue/suggested', async (req: Request, res: Response) => {
+  app.get('/api/queue/suggested', async (req: Request, res: Response, next: NextFunction) => {
     if (!opts.db || !opts.executor) {
       return res.status(503).json({ error: 'unavailable' });
     }
@@ -325,8 +326,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       });
       res.json(suggestion);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'unknown';
-      res.status(502).json({ error: msg });
+      next(new AppError('CLAUDIO_ERR_API', err instanceof Error ? err.message : String(err), 502));
     }
   });
 
@@ -395,13 +395,13 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     if (ncmApi !== undefined) setNcmBase(ncmApi);
     if (feishuAppId !== undefined || feishuAppSecret !== undefined) setFeishuConfig(feishuAppId ?? '', feishuAppSecret ?? '');
     if (upnpDevices !== undefined) {
-      try { setUpnpDevices(JSON.parse(upnpDevices)); } catch { /* keep current */ }
+      try { setUpnpDevices(JSON.parse(upnpDevices)); } catch { console.warn('[config] upnp parse failed'); }
     }
 
     res.json({ ok: true });
   });
 
-  app.post('/api/config/test', async (req: Request, res: Response) => {
+  app.post('/api/config/test', async (req: Request, res: Response, next: NextFunction) => {
     if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
     const apiKey = req.body.apiKey || getPref(opts.db, 'api_key') || '';
     const baseUrl = req.body.baseUrl || getPref(opts.db, 'api_base_url') || '';
@@ -458,7 +458,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     }
   });
 
-  app.get('/api/models', async (_req: Request, res: Response) => {
+  app.get('/api/models', async (_req: Request, res: Response, next: NextFunction) => {
     if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
     const apiKey = getPref(opts.db, 'api_key') || '';
     const baseUrl = getPref(opts.db, 'api_base_url') || '';
@@ -500,27 +500,27 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     return { body, cookie: body.cookie as string | undefined };
   }
 
-  app.post('/api/ncm/login/qr/key', async (_req: Request, res: Response) => {
+  app.post('/api/ncm/login/qr/key', async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const { body } = await ncmProxyGet('/login/qr/key?timestamp=' + Date.now());
       res.json(body);
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
-  app.post('/api/ncm/login/qr/create', async (req: Request, res: Response) => {
+  app.post('/api/ncm/login/qr/create', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { key } = req.body;
       if (!key) return res.status(400).json({ error: 'key required' });
       const { body } = await ncmProxyGet(`/login/qr/create?key=${encodeURIComponent(key)}&qrimg=true&timestamp=${Date.now()}`);
       res.json(body);
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
-  app.post('/api/ncm/login/qr/check', async (req: Request, res: Response) => {
+  app.post('/api/ncm/login/qr/check', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { key } = req.body;
       if (!key) return res.status(400).json({ error: 'key required' });
@@ -535,11 +535,11 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       }
       res.json(body);
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
-  app.post('/api/ncm/login/cellphone', async (req: Request, res: Response) => {
+  app.post('/api/ncm/login/cellphone', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { phone, password, captcha } = req.body;
       if (!phone) return res.status(400).json({ error: 'phone required' });
@@ -561,18 +561,18 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       }
       res.json(body);
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
-  app.post('/api/ncm/login/send-captcha', async (req: Request, res: Response) => {
+  app.post('/api/ncm/login/send-captcha', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { phone } = req.body;
       if (!phone) return res.status(400).json({ error: 'phone required' });
       const { body } = await ncmProxyGet(`/captcha/sent?phone=${encodeURIComponent(phone)}&timestamp=${Date.now()}&randomCNIP=true`);
       res.json(body);
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
@@ -582,7 +582,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     res.json({ ok: true });
   });
 
-  app.get('/api/ncm/login/status', async (_req: Request, res: Response) => {
+  app.get('/api/ncm/login/status', async (_req: Request, res: Response, next: NextFunction) => {
     const loggedIn = !!getNcmCookie();
     let vipType = 0;
     let nickname = '';
@@ -591,7 +591,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
         const info = await getLoginStatus();
         vipType = info.vipType;
         nickname = info.nickname;
-      } catch { /* network call best-effort */ }
+      } catch { console.warn('[ncm] login status fetch failed'); }
     }
     res.json({ loggedIn, vipType, nickname });
   });
@@ -606,7 +606,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     return true;
   }
 
-  app.get('/api/ncm/playlists', async (_req: Request, res: Response) => {
+  app.get('/api/ncm/playlists', async (_req: Request, res: Response, next: NextFunction) => {
     if (!requireNcmLogin(res)) return;
     try {
       const status = await getLoginStatus();
@@ -614,11 +614,11 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       const playlists = await getUserPlaylists(status.userId);
       res.json({ playlists });
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
-  app.get('/api/ncm/playlist/:id', async (req: Request, res: Response) => {
+  app.get('/api/ncm/playlist/:id', async (req: Request, res: Response, next: NextFunction) => {
     if (!requireNcmLogin(res)) return;
     try {
       const pid = Number(req.params.id);
@@ -626,11 +626,11 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       const detail = await getPlaylistDetail(pid);
       res.json(detail);
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
-  app.post('/api/ncm/playlist/create', async (req: Request, res: Response) => {
+  app.post('/api/ncm/playlist/create', async (req: Request, res: Response, next: NextFunction) => {
     if (!requireNcmLogin(res)) return;
     const { name, privacy } = req.body;
     if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name required' });
@@ -638,11 +638,11 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       const playlist = await createPlaylist(name, !!privacy);
       res.json({ playlist });
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
-  app.post('/api/ncm/playlist/:id/tracks', async (req: Request, res: Response) => {
+  app.post('/api/ncm/playlist/:id/tracks', async (req: Request, res: Response, next: NextFunction) => {
     if (!requireNcmLogin(res)) return;
     const pid = Number(req.params.id);
     if (isNaN(pid)) return res.status(400).json({ error: 'Invalid playlist id' });
@@ -653,11 +653,11 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       addCachedTrackIds(pid, trackIds);
       res.json({ ok: true });
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
-  app.delete('/api/ncm/playlist/:id/tracks', async (req: Request, res: Response) => {
+  app.delete('/api/ncm/playlist/:id/tracks', async (req: Request, res: Response, next: NextFunction) => {
     if (!requireNcmLogin(res)) return;
     const pid = Number(req.params.id);
     if (isNaN(pid)) return res.status(400).json({ error: 'Invalid playlist id' });
@@ -668,11 +668,11 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       removeCachedTrackIds(pid, trackIds);
       res.json({ ok: true });
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
-  app.get('/api/status/ncm', async (_req: Request, res: Response) => {
+  app.get('/api/status/ncm', async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const [status, loginInfo] = await Promise.all([
         (async () => {
@@ -688,13 +688,14 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       ]);
       res.json({ ...status, vipType: loginInfo.vipType, nickname: loginInfo.nickname });
     } catch {
+      console.warn('[ncm] status check failed');
       res.json({ online: false, reason: 'unreachable', vipType: 0 });
     }
   });
 
   // ── Weather ──
 
-  app.get('/api/weather', async (req: Request, res: Response) => {
+  app.get('/api/weather', async (req: Request, res: Response, next: NextFunction) => {
     const lat = Number(req.query.lat);
     const lon = Number(req.query.lon);
     if (isNaN(lat) || isNaN(lon)) return res.status(400).json({ error: 'lat and lon required' });
@@ -704,7 +705,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       const data = await getCurrentWeatherByCoords(lat, lon);
       res.json(data);
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
@@ -731,7 +732,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
 
   // ── Hide ──
 
-  app.post('/api/hide', async (req: Request, res: Response) => {
+  app.post('/api/hide', async (req: Request, res: Response, next: NextFunction) => {
     if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
     const { songId, name, artist, scene, sessionId } = req.body;
     if (!songId) return res.status(400).json({ error: 'songId required' });
@@ -758,7 +759,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
 
   // ── Direct Play ──
 
-  app.post('/api/play/fm/start', async (_req: Request, res: Response) => {
+  app.post('/api/play/fm/start', async (_req: Request, res: Response, next: NextFunction) => {
     if (!opts.executor) return res.status(503).json({ error: 'executor unavailable' });
     try {
       const item = await opts.executor.startFM();
@@ -767,11 +768,11 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       if (opts.db) addMessage(opts.db, { role: 'assistant', content: `Playing: ${item.name} by ${item.artist}` });
       res.json(item);
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
-  app.post('/api/play/intelligence/start', async (req: Request, res: Response) => {
+  app.post('/api/play/intelligence/start', async (req: Request, res: Response, next: NextFunction) => {
     if (!opts.executor) return res.status(503).json({ error: 'executor unavailable' });
     const { songId, playlistId } = req.body;
     if (!songId) return res.status(400).json({ error: 'songId required' });
@@ -786,11 +787,11 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       }
       res.json(items);
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
-  app.post('/api/play/fm/next', async (_req: Request, res: Response) => {
+  app.post('/api/play/fm/next', async (_req: Request, res: Response, next: NextFunction) => {
     if (!opts.executor) return res.status(503).json({ error: 'executor unavailable' });
     const ps = opts.executor.getPlayState();
     if (!ps.isFmMode) return res.status(400).json({ error: 'not in FM mode' });
@@ -800,17 +801,17 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       broadcast('play', { tracks: [item], fm: true });
       res.json(item);
     } catch (err) {
-      res.status(502).json({ error: (err as Error).message });
+      next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
     }
   });
 
-  app.post('/api/play/mode/exit', async (_req: Request, res: Response) => {
+  app.post('/api/play/mode/exit', async (_req: Request, res: Response, next: NextFunction) => {
     if (opts.executor) opts.executor.exitMode();
     broadcast('mode_exit', {});
     res.json({ ok: true });
   });
 
-  app.post('/api/play/by-id', async (req: Request, res: Response) => {
+  app.post('/api/play/by-id', async (req: Request, res: Response, next: NextFunction) => {
     const { songId } = req.body;
     if (!songId) return res.status(400).json({ error: 'songId required' });
 
@@ -824,23 +825,23 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       const item = { songId: String(detail.id), name: detail.name, artist: detail.artist, url };
       res.json(item);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'unknown';
-      res.status(502).json({ error: msg });
+      next(new AppError('CLAUDIO_ERR_API', err instanceof Error ? err.message : String(err), 502));
     }
   });
 
-  app.get('/api/lyric', async (req: Request, res: Response) => {
+  app.get('/api/lyric', async (req: Request, res: Response, next: NextFunction) => {
     const songId = Number(req.query.songId);
     if (!songId) return res.status(400).json({ error: 'songId required' });
     try {
       const lyric = await getLyric(songId);
       res.json({ lyric });
     } catch {
+      console.warn('[api] lyric fetch failed');
       res.json({ lyric: '' });
     }
   });
 
-  app.post('/api/play/similar', async (req: Request, res: Response) => {
+  app.post('/api/play/similar', async (req: Request, res: Response, next: NextFunction) => {
     const { songId } = req.body;
     if (!songId) return res.status(400).json({ error: 'songId required' });
 
@@ -850,18 +851,17 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
 
       const items = await Promise.all(songs.map(async (s) => {
         let url = '';
-        try { url = await getSongUrl(Number(s.id)); } catch { /* best-effort */ }
+        try { url = await getSongUrl(Number(s.id)); } catch { console.warn('[api] similar song URL failed'); }
         return { songId: String(s.id), name: s.name, artist: s.artist, url };
       }));
 
       res.json({ songs: items });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'unknown';
-      res.status(502).json({ error: msg });
+      next(new AppError('CLAUDIO_ERR_API', err instanceof Error ? err.message : String(err), 502));
     }
   });
 
-  app.post('/api/play/search', async (req: Request, res: Response) => {
+  app.post('/api/play/search', async (req: Request, res: Response, next: NextFunction) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'name required' });
 
@@ -874,8 +874,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       const item = { songId: String(songs[0].id), name: songs[0].name, artist: songs[0].artist, url };
       res.json(item);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'unknown';
-      res.status(502).json({ error: msg });
+      next(new AppError('CLAUDIO_ERR_API', err instanceof Error ? err.message : String(err), 502));
     }
   });
 
@@ -944,17 +943,17 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     res.json({ periods: getPlayStatsAll(opts.db) });
   });
 
-  app.post('/api/stats/generate', async (req: Request, res: Response) => {
+  app.post('/api/stats/generate', async (req: Request, res: Response, next: NextFunction) => {
     if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
     try {
       const period = req.body.period || new Date().toISOString().slice(0, 7);
       const report = await generateReport(opts.db, period);
       res.json(report);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'unknown';
-      res.status(502).json({ error: msg });
+      next(new AppError('CLAUDIO_ERR_API', err instanceof Error ? err.message : String(err), 502));
     }
   });
 
+  app.use(errorMiddleware);
   return app;
 }

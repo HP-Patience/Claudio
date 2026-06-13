@@ -11,6 +11,7 @@ import { setFeishuConfig } from './adapters/feishu.js';
 import { setUpnpDevices } from './adapters/upnp.js';
 import { setFishKey } from './tts.js';
 import { startTriggerLoop, getCachedCoords } from './triggers.js';
+import { getNcmCookie } from './adapters/netease.js';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -43,7 +44,7 @@ export async function start(options: StartOptions = {}) {
   if (feishuAppId || feishuAppSecret) setFeishuConfig(feishuAppId ?? '', feishuAppSecret ?? '');
   const upnpRaw = getPref(db, 'upnp_devices');
   if (upnpRaw) {
-    try { setUpnpDevices(JSON.parse(upnpRaw)); } catch { /* keep env default */ }
+    try { setUpnpDevices(JSON.parse(upnpRaw)); } catch { console.warn('[server] upnp parse failed, using env default'); }
   }
 
   // Load NCM cookie for authenticated requests
@@ -76,9 +77,7 @@ export async function start(options: StartOptions = {}) {
       const ctx = await executor.getContext(coords ?? undefined);
       const now = new Date();
       return { hour: now.getHours(), day: now.getDay(), weather: ctx.weather, calendar: ctx.calendar };
-    } catch {
-      return { hour: 0, day: 0, weather: '', calendar: '' };
-    }
+    } catch { console.warn('[server] trigger loop context fetch failed'); return { hour: 0, day: 0, weather: '', calendar: '' }; }
   });
 
   return new Promise<{ server: http.Server; shutdown: () => Promise<void> }>((resolve) => {
@@ -104,7 +103,23 @@ const isMain =
 
 if (isMain) {
   start().then(({ shutdown }) => {
-    console.log(`Claudio server started on http://localhost:${process.env.PORT || 3005}`);
+    const port = process.env.PORT || 3005;
+    const ncmApi = process.env.NCM_API || 'http://localhost:3001';
+    const hasApiKey = !!(process.env.ANTHROPIC_API_KEY || process.env.DEEPSEEK_API_KEY);
+    const ncmLoggedIn = !!getNcmCookie();
+
+    console.log('');
+    console.log('┌───────────────────────────────────────────┐');
+    console.log('│  Claudio Server                          │');
+    console.log('│  http://localhost:' + String(port).padEnd(28) + '│');
+    console.log('├───────────────────────────────────────────┤');
+    console.log("│  API: POST /api/chat                     │");
+    console.log("│  WS:  /stream                            │");
+    console.log('│  NCM: ' + ncmApi.padEnd(33) + '│');
+    console.log('│  Key: ' + (hasApiKey ? '✓ configured'.padEnd(33) : '⚠ missing'.padEnd(34)) + '│');
+    console.log('│  Login:' + (ncmLoggedIn ? ' ✓ logged in'.padEnd(33) : ' not logged in'.padEnd(33)) + '│');
+    console.log('└───────────────────────────────────────────┘');
+    console.log('');
 
     process.on('SIGINT', async () => {
       console.log('\nShutting down...');

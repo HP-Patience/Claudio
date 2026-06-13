@@ -52,6 +52,7 @@ export async function synthesize(
     fs.writeFileSync(cachePath, buffer);
     return cachePath;
   } catch {
+    console.warn('[tts] download or cache failed');
     return null;
   }
 }

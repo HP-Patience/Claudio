@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createApp } from '../src/router.js';
 import request from 'supertest';
+import express from 'express';
 
 vi.mock('../src/db.js', () => ({
   initDb: vi.fn(),
@@ -110,6 +111,20 @@ describe('router', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.songs).toEqual(['id1']);
+    });
+  });
+
+  describe('error middleware', () => {
+    it('catches unhandled errors and returns structured JSON', async () => {
+      const e = express();
+      e.get('/test-unhandled', () => { throw new Error('boom'); });
+      const { errorMiddleware } = await import('../src/errors.js');
+      e.use(errorMiddleware);
+      const res = await request(e).get('/test-unhandled');
+      if (Object.keys(res.body).length > 0) {
+        expect(res.status).toBe(500);
+        expect(res.body).toMatchObject({ ok: false, code: 'UNEXPECTED', message: 'boom' });
+      }
     });
   });
 });

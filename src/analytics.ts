@@ -91,6 +91,7 @@ export async function generateReport(db: Database.Database, period?: string): Pr
     setPlayStats(db, p, JSON.stringify(stat), result.say);
     return { period: p, stat, insight: result.say };
   } catch {
+    console.warn('[analytics] LLM report failed, using fallback');
     const fallback = `${p} 月度听歌报告\n\n总播放 ${stat.totalPlays} 次\n最爱歌手: ${stat.topArtists[0]?.name || '未知'}\n最爱歌曲: ${stat.topSongs[0]?.name || '未知'}`;
     setPlayStats(db, p, JSON.stringify(stat), fallback);
     return { period: p, stat, insight: fallback };

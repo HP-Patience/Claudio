@@ -86,7 +86,7 @@ export function startTriggerLoop(getContext: () => Promise<TriggerContext>): voi
     try {
       const ctx = await getContext();
       checkTriggers(ctx);
-    } catch { /* ignore */ }
+    } catch { console.warn('[triggers] check failed'); }
   }, 5 * 60_000);
 }
 
