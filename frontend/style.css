@@ -681,9 +681,9 @@ select.form-input { appearance: auto; cursor: pointer; }
 
 /* ── Toast ── */
 .toast-container {
-  position: fixed; bottom: 24px; right: 24px;
-  z-index: 9998; display: flex; flex-direction: column; gap: 8px;
-  max-width: 360px;
+  position: fixed; inset: 0;
+  z-index: 9998; display: flex; justify-content: center; align-items: center;
+  pointer-events: none;
 }
 .toast-card {
   background: var(--bg-card); border: 1px solid var(--accent);
@@ -691,10 +691,11 @@ select.form-input { appearance: auto; cursor: pointer; }
   box-shadow: 0 8px 40px rgba(0,0,0,0.5);
   animation: toast-in .25s ease-out;
   display: flex; flex-direction: column; gap: 10px;
+  pointer-events: auto; max-width: 360px;
 }
 @keyframes toast-in {
-  from { opacity: 0; transform: translateX(20px); }
-  to { opacity: 1; transform: translateX(0); }
+  from { opacity: 0; transform: translateY(-12px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .toast-text {
   font-size: 13px; color: var(--text-primary); font-weight: 600;

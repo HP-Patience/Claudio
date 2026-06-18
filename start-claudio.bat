@@ -19,8 +19,15 @@ if errorlevel 1 goto wait_ncm
 
 :start_claudio
 echo [2/2] Starting Claudio server on http://localhost:3005
+
+:: Kill any existing process on port 3005
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":3005 "') do (
+  taskkill //F //PID %%p >nul 2>&1
+)
+timeout /t 1 /nobreak >nul
+
 echo.
-start "Claudio-Server" /min cmd /c "cd /d "%~dp0" && npx tsx src\server.ts"
+start "Claudio-Server" /min cmd /c "cd /d "%~dp0" && node --env-file=.env --import tsx src\server.ts"
 
 echo.
 echo ========================================
