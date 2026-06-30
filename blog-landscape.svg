@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 600" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Mountain sunset landscape">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e3a5f"/>
+      <stop offset="0.45" stop-color="#7a5a7a"/>
+      <stop offset="0.75" stop-color="#e8836a"/>
+      <stop offset="1" stop-color="#fbd28a"/>
+    </linearGradient>
+    <linearGradient id="m1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a4a6b"/>
+      <stop offset="1" stop-color="#1f2a3d"/>
+    </linearGradient>
+    <linearGradient id="m2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5a6a8a"/>
+      <stop offset="1" stop-color="#2d3a52"/>
+    </linearGradient>
+    <linearGradient id="m3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7a8aaa"/>
+      <stop offset="1" stop-color="#4a5a78"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff5d6"/>
+      <stop offset="0.4" stop-color="#ffb86b"/>
+      <stop offset="1" stop-color="#ffb86b" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fog" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd9a8" stop-opacity="0"/>
+      <stop offset="1" stop-color="#ffd9a8" stop-opacity="0.35"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="600" fill="url(#sky)"/>
+
+  <circle cx="820" cy="330" r="200" fill="url(#sun)"/>
+  <circle cx="820" cy="330" r="58" fill="#fff8e0"/>
+
+  <rect x="0" y="280" width="1600" height="120" fill="url(#fog)"/>
+
+  <path d="M0,420 L120,330 L240,380 L380,290 L520,360 L680,300 L820,350 L960,280 L1100,340 L1240,290 L1380,360 L1520,310 L1600,350 L1600,600 L0,600 Z"
+        fill="url(#m1)" opacity="0.75"/>
+
+  <path d="M0,470 L150,390 L300,440 L460,370 L620,430 L780,380 L940,440 L1100,390 L1260,450 L1420,400 L1600,440 L1600,600 L0,600 Z"
+        fill="url(#m2)"/>
+
+  <path d="M0,520 L180,450 L360,500 L540,440 L720,510 L900,460 L1080,520 L1260,470 L1440,520 L1600,480 L1600,600 L0,600 Z"
+        fill="url(#m3)"/>
+
+  <path d="M0,565 L200,525 L400,565 L600,535 L800,570 L1000,540 L1200,575 L1400,545 L1600,565 L1600,600 L0,600 Z"
+        fill="#0d1626"/>
+</svg>
