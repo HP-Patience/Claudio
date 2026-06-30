@@ -194,6 +194,13 @@ export function setPlayMode(mode) {
 export function playTrack(item) {
   if (!item || !item.url) return;
   state.currentTrack = item;
+  if (item.songId) {
+    fetch('/api/history/record', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ songId: item.songId, name: item.name, artist: item.artist }),
+    }).catch((err) => console.warn('[history] record failed', err));
+  }
   audio.src = resolveAudioUrl(item.url);
   audio.play().catch(() => {});
   dom.nowPlaying.textContent = `${item.name} - ${item.artist}`;

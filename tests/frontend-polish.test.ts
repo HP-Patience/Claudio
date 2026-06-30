@@ -34,7 +34,7 @@ describe('frontend polish', () => {
     const mainSource = fs.readFileSync(path.resolve('frontend/js/main.js'), 'utf-8');
 
     expect(domSource).toContain('historyPanel');
-    expect(mainSource).toContain("./history-panel.js");
+    expect(mainSource).toContain("from './history-panel.js'");
     expect(mainSource).toContain("target === 'history'");
     expect(mainSource).toContain('renderHistoryPanel');
   });
@@ -47,5 +47,13 @@ describe('frontend polish', () => {
     expect(source).toContain('加载历史失败');
     expect(source).toContain('history-pagination');
     expect(source).toContain('/api/play/by-id');
+  });
+
+  it('audio core records history only from the actual playTrack path', () => {
+    const source = fs.readFileSync(path.resolve('frontend/js/audio-core.js'), 'utf-8');
+
+    expect(source).toContain('export function playTrack(item)');
+    expect(source).toContain("fetch('/api/history/record'");
+    expect(source.indexOf('export function playTrack(item)')).toBeLessThan(source.indexOf("fetch('/api/history/record'"));
   });
 });

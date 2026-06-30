@@ -1,7 +1,7 @@
 // Claudio FM — 历史播放面板
 import { state } from './state.js';
 import { dom } from './dom.js';
-import { playTrack, setQueue } from './audio-core.js';
+import { playTrack, setQueue, showModeToast } from './audio-core.js';
 
 const PAGE_SIZE = 20;
 
@@ -44,11 +44,16 @@ async function playHistoryItem(item, button) {
       body: JSON.stringify({ songId: item.song_id }),
     });
     const playable = await res.json();
-    if (!playable.url) return;
+    if (!playable.url) {
+      showModeToast('历史歌曲暂不可播放');
+      return;
+    }
     state.queue.unshift(playable);
     setQueue(state.queue);
     playTrack(playable);
     await renderHistoryPanel(1);
+  } catch {
+    showModeToast('历史歌曲播放失败');
   } finally {
     button.textContent = '▶';
     button.disabled = false;

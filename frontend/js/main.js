@@ -11,7 +11,7 @@ import * as queuePanel from './queue-panel.js';
 import * as favsPanel from './favs-panel.js';
 import * as statsPanel from './stats-panel.js';
 import * as playlistsPanel from './playlists-panel.js';
-import * as historyPanel from "./history-panel.js";
+import * as historyPanel from './history-panel.js';
 import * as settings from './settings.js';
 import * as ncmAuth from './ncm-auth.js';
 import * as ws from './ws.js';

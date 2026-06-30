@@ -195,20 +195,16 @@ describe('router', () => {
   });
 
   describe('play history recording', () => {
-    it('records direct play by id after resolving a playable item', async () => {
+    it('does not record direct play by id before the browser starts playback', async () => {
       const res = await request(app)
         .post('/api/play/by-id')
         .send({ songId: '123' });
 
       expect(res.status).toBe(200);
-      expect(addPlay).toHaveBeenCalledWith(expect.anything(), {
-        song_id: '123',
-        song_name: 'Mock Song',
-        artist: 'Mock Artist',
-      });
+      expect(addPlay).not.toHaveBeenCalled();
     });
 
-    it('records chat executor results after successful playback resolution', async () => {
+    it('does not record chat executor results before the browser starts playback', async () => {
       const executor = {
         getContext: vi.fn().mockResolvedValue({ weather: '', calendar: '' }),
         executePlay: vi.fn().mockResolvedValue([
@@ -223,11 +219,30 @@ describe('router', () => {
         .send({ text: '播放爵士乐' });
 
       expect(res.status).toBe(200);
+      expect(addPlay).not.toHaveBeenCalled();
+    });
+
+    it('records browser-confirmed playback events', async () => {
+      const res = await request(app)
+        .post('/api/history/record')
+        .send({ songId: '123', name: 'Mock Song', artist: 'Mock Artist' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ ok: true });
       expect(addPlay).toHaveBeenCalledWith(expect.anything(), {
-        song_id: '321',
-        song_name: 'Chat Song',
-        artist: 'Chat Artist',
+        song_id: '123',
+        song_name: 'Mock Song',
+        artist: 'Mock Artist',
       });
+    });
+
+    it('rejects browser playback records without songId', async () => {
+      const res = await request(app)
+        .post('/api/history/record')
+        .send({ name: 'Missing Song ID' });
+
+      expect(res.status).toBe(400);
+      expect(addPlay).not.toHaveBeenCalled();
     });
   });
 
