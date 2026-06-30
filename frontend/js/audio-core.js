@@ -205,11 +205,12 @@ let playRequestToken = 0;
 export function playTrack(item) {
   if (!item || !item.url) return;
   const token = ++playRequestToken;
+  const audioUrl = resolveAudioUrl(item.url);
   state.currentTrack = item;
-  audio.src = resolveAudioUrl(item.url);
+  audio.src = audioUrl;
   audio.play()
     .then(() => {
-      if (token === playRequestToken && state.currentTrack === item && audio.src === resolveAudioUrl(item.url)) {
+      if (token === playRequestToken && state.currentTrack === item) {
         recordPlayback(item);
       }
     })

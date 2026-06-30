@@ -58,6 +58,9 @@ describe('frontend polish', () => {
     expect(source).toContain('.then(() => {');
     expect(source).toContain('recordPlayback(item)');
     const playTrackSource = source.slice(source.indexOf('export function playTrack(item)'), source.indexOf('function updateMediaSession(item)'));
+    expect(playTrackSource).toContain('const audioUrl = resolveAudioUrl(item.url)');
+    expect(playTrackSource).toContain('audio.src = audioUrl');
+    expect(playTrackSource).not.toContain('audio.src === resolveAudioUrl(item.url)');
     expect(playTrackSource.indexOf('.then(() => {')).toBeLessThan(playTrackSource.indexOf('recordPlayback(item)'));
   });
 
