@@ -1,9 +1,40 @@
 // Claudio FM — 统计面板
 import { dom } from './dom.js';
 
+const RANGES = [
+  ['week', '本周'],
+  ['month', '本月'],
+  ['quarter', '本季度'],
+  ['year', '本年'],
+];
+
+function getRangeLabel(range) {
+  return RANGES.find(([value]) => value === range)?.[1] || '本月';
+}
+
+function fetchStats(range) {
+  return fetch('/api/stats?range=' + encodeURIComponent(range), { cache: 'no-store' });
+}
+
+function clearStatsContent() {
+  dom.statsPanel.querySelectorAll('.stats-report, .panel-empty').forEach(el => el.remove());
+}
+
+function renderEmpty() {
+  clearStatsContent();
+  const empty = document.createElement('div');
+  empty.className = 'panel-empty';
+  empty.textContent = '暂无报告';
+  const genBtn = dom.statsPanel.querySelector('.stats-gen-btn');
+  if (genBtn) {
+    dom.statsPanel.insertBefore(empty, genBtn);
+  } else {
+    dom.statsPanel.appendChild(empty);
+  }
+}
+
 function renderReportContent(data) {
-  const existing = dom.statsPanel.querySelectorAll('.stats-report');
-  existing.forEach(el => el.remove());
+  clearStatsContent();
 
   const card = document.createElement('div');
   card.className = 'stats-report';
@@ -37,59 +68,61 @@ function renderReportContent(data) {
 export async function renderStatsPanel() {
   dom.statsPanel.innerHTML = '<div class="panel-empty">Loading...</div>';
   try {
-    const listRes = await fetch('/api/stats/list');
-    const listData = await listRes.json();
-    const periods = listData.periods || [];
-    const currentPeriod = periods[0]?.period || new Date().toISOString().slice(0, 7);
-
-    const res = await fetch('/api/stats?period=' + currentPeriod);
+    let selectedRange = 'month';
+    const res = await fetchStats(selectedRange);
     const data = await res.json();
 
     dom.statsPanel.innerHTML = '';
 
-    if (periods.length > 1) {
-      const sel = document.createElement('select');
-      sel.className = 'stats-period-select';
-      for (const p of periods) {
-        const opt = document.createElement('option');
-        opt.value = p.period;
-        opt.textContent = p.period;
-        opt.selected = p.period === currentPeriod;
-        sel.appendChild(opt);
-      }
-      sel.addEventListener('change', async () => {
-        const r = await fetch('/api/stats?period=' + sel.value);
-        const d = await r.json();
-        renderReportContent(d);
-      });
-      dom.statsPanel.appendChild(sel);
+    const sel = document.createElement('select');
+    sel.className = 'stats-range-select';
+    for (const [value, label] of RANGES) {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      opt.selected = value === selectedRange;
+      sel.appendChild(opt);
     }
+    dom.statsPanel.appendChild(sel);
 
     if (data.insight) {
       renderReportContent(data);
     } else {
-      const empty = document.createElement('div');
-      empty.className = 'panel-empty';
-      empty.textContent = '暂无报告';
-      dom.statsPanel.appendChild(empty);
+      renderEmpty();
     }
 
     const btn = document.createElement('button');
     btn.className = 'stats-gen-btn';
-    btn.textContent = '生成本月报告';
+    btn.textContent = `生成${getRangeLabel(selectedRange)}报告`;
     btn.addEventListener('click', async () => {
       btn.textContent = '生成中…';
       btn.disabled = true;
       try {
-        const r = await fetch('/api/stats/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+        const r = await fetch('/api/stats/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ range: selectedRange }),
+        });
         const d = await r.json();
         renderReportContent(d);
       } catch { /* ignore */ } finally {
-        btn.textContent = '生成本月报告';
+        btn.textContent = `生成${getRangeLabel(selectedRange)}报告`;
         btn.disabled = false;
       }
     });
     dom.statsPanel.appendChild(btn);
+
+    sel.addEventListener('change', async () => {
+      selectedRange = sel.value;
+      btn.textContent = `生成${getRangeLabel(selectedRange)}报告`;
+      const r = await fetchStats(selectedRange);
+      const d = await r.json();
+      if (d.insight) {
+        renderReportContent(d);
+      } else {
+        renderEmpty();
+      }
+    });
   } catch {
     dom.statsPanel.innerHTML = '<div class="panel-empty">加载失败</div>';
   }

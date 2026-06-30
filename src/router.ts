@@ -5,7 +5,7 @@ import { getRecentPlays, getPlayHistory, getPlan, addMessage, addPlay, getMessag
 import { invokeClaude } from './claude.js';
 import { assemblePrompt } from './context.js';
 import { getSuggestedQueue } from './predictor.js';
-import { generateReport } from './analytics.js';
+import { generateReport, getCurrentStatsWindow, isStatsRange } from './analytics.js';
 import type { createExecutor } from './executor.js';
 import { broadcast } from './ws.js';
 import { handleSkip } from './feedback.js';
@@ -957,10 +957,19 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
 
   app.get('/api/stats', (req: Request, res: Response) => {
     if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
-    const period = (req.query.period as string) || new Date().toISOString().slice(0, 7);
+    const range = req.query.range;
+    if (range !== undefined) {
+      if (!isStatsRange(range)) return res.status(400).json({ error: 'invalid range' });
+      const window = getCurrentStatsWindow(range);
+      const stats = getPlayStats(opts.db, window.period);
+      if (!stats) return res.json({ period: window.period, range, stat: null, insight: null });
+      return res.json({ ...stats, range });
+    }
+
+    const period = (req.query.period as string) || getCurrentStatsWindow('month').period;
     const stats = getPlayStats(opts.db, period);
-    if (!stats) return res.json({ period, stat: null, insight: null });
-    res.json(stats);
+    if (!stats) return res.json({ period, range: 'month', stat: null, insight: null });
+    res.json({ ...stats, range: 'month' });
   });
 
   app.get('/api/stats/list', (_req: Request, res: Response) => {
@@ -971,7 +980,15 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
   app.post('/api/stats/generate', async (req: Request, res: Response, next: NextFunction) => {
     if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
     try {
-      const period = req.body.period || new Date().toISOString().slice(0, 7);
+      const range = req.body.range;
+      if (range !== undefined) {
+        if (!isStatsRange(range)) return res.status(400).json({ error: 'invalid range' });
+        const window = getCurrentStatsWindow(range);
+        const report = await generateReport(opts.db, window.period, range);
+        return res.json(report);
+      }
+
+      const period = req.body.period || getCurrentStatsWindow('month').period;
       const report = await generateReport(opts.db, period);
       res.json(report);
     } catch (err) {

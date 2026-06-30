@@ -1,3 +1,4 @@
+import Database from 'better-sqlite3';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createApp } from '../src/router.js';
 import request from 'supertest';
@@ -24,7 +25,9 @@ vi.mock('../src/db.js', () => ({
   addMessage: vi.fn(),
   addPlay: vi.fn(),
   getPref: vi.fn().mockReturnValue(null),
+  getPlayStats: vi.fn().mockReturnValue(null),
   getPlayStatsAll: vi.fn().mockReturnValue([]),
+  setPlayStats: vi.fn(),
   setPref: vi.fn(),
 }));
 
@@ -62,7 +65,7 @@ vi.mock('../src/adapters/netease.js', () => ({
   getSimilarSongs: vi.fn().mockResolvedValue([{ id: 456, name: 'Similar Song', artist: 'Similar Artist', album: 'Similar Album' }]),
 }));
 
-import { getRecentPlays, getPlayHistory, getPref, setPref, addPlay } from '../src/db.js';
+import { getRecentPlays, getPlayHistory, getPref, setPref, addPlay, getPlayStats } from '../src/db.js';
 import { invokeClaude } from '../src/claude.js';
 import { assemblePrompt } from '../src/context.js';
 import { getSuggestedQueue } from '../src/predictor.js';
@@ -176,6 +179,51 @@ describe('router', () => {
       expect(res.body.queue).toHaveLength(1);
       expect(res.body.queue[0].song_name).toBe('Take Five');
       expect(res.body.queue[0].artist).toBe('Dave Brubeck');
+    });
+  });
+
+  describe('Stats API', () => {
+    it('returns the current week report slot when range is week', async () => {
+      const res = await request(app).get('/api/stats?range=week');
+
+      expect(res.status).toBe(200);
+      expect(res.body.range).toBe('week');
+      expect(res.body.period).toMatch(/^\d{4}-W\d{2}$/);
+      expect(res.body.stat).toBeNull();
+      expect(res.body.insight).toBeNull();
+      expect(getPlayStats).toHaveBeenCalledWith(expect.anything(), expect.stringMatching(/^\d{4}-W\d{2}$/));
+    });
+
+    it('rejects unsupported stats ranges', async () => {
+      const res = await request(app).get('/api/stats?range=bad');
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('invalid range');
+    });
+
+    it('keeps legacy monthly period lookup working', async () => {
+      const res = await request(app).get('/api/stats?period=2026-07');
+
+      expect(res.status).toBe(200);
+      expect(res.body.period).toBe('2026-07');
+      expect(res.body.range).toBe('month');
+      expect(getPlayStats).toHaveBeenCalledWith(expect.anything(), '2026-07');
+    });
+
+    it('generates the current year report when range is year', async () => {
+      const db = new Database(':memory:');
+      db.exec('CREATE TABLE plays (id INTEGER PRIMARY KEY AUTOINCREMENT, song_id TEXT, song_name TEXT, artist TEXT, played_at TEXT)');
+      app = createApp({ db: db as any });
+
+      const res = await request(app)
+        .post('/api/stats/generate')
+        .send({ range: 'year' });
+
+      db.close();
+
+      expect(res.status).toBe(200);
+      expect(res.body.range).toBe('year');
+      expect(res.body.period).toMatch(/^\d{4}$/);
     });
   });
 
