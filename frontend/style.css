@@ -268,11 +268,11 @@ body {
 
 .player-bottom { margin-top: 10px; }
 .progress-container {
-  width: 100%; height: 8px; background: var(--border);
-  border-radius: 4px; cursor: pointer; position: relative;
+  width: 100%; height: 7px; background: var(--border);
+  border-radius: 3.5px; cursor: pointer; position: relative;
 }
 #progress-bar {
-  height: 100%; background: var(--accent); border-radius: 4px; width: 0%;
+  height: 100%; background: var(--accent); border-radius: 3.5px; width: 0%;
   position: absolute; left: 0; top: 0; pointer-events: none;
 }
 .time-labels {
@@ -366,9 +366,19 @@ body {
 
 /* ── Panels ── */
 .panel {
-  max-height: 320px; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 4px;
+  height: 320px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   scroll-behavior: smooth;
+}
+@media (max-height: 720px) {
+  .panel {
+    height: 260px;
+    max-height: 260px;
+  }
 }
 .panel::-webkit-scrollbar { width: 3px; }
 .panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }

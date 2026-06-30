@@ -89,6 +89,19 @@ describe('frontend polish', () => {
     expect(replaySource).not.toContain('audio.play().catch(() => {})');
   });
 
+  it('keeps tab panel height stable during async content swaps', () => {
+    const css = fs.readFileSync(path.resolve('frontend/style.css'), 'utf-8');
+
+    expect(css).toMatch(/\.panel\s*\{[\s\S]*height:\s*320px;[\s\S]*max-height:\s*320px;/);
+    expect(css).toMatch(/@media \(max-height: 720px\)\s*\{[\s\S]*\.panel\s*\{[\s\S]*height:\s*260px;[\s\S]*max-height:\s*260px;/);
+  });
+
+  it('stats panel bypasses browser cache when reading reports', () => {
+    const source = fs.readFileSync(path.resolve('frontend/js/stats-panel.js'), 'utf-8');
+
+    expect(source).toContain("cache: 'no-store'");
+  });
+
   it('FM next playback uses the shared playTrack path', () => {
     const source = fs.readFileSync(path.resolve('frontend/js/audio-core.js'), 'utf-8');
     const fmStart = source.indexOf('async function fetchNextFm()');
