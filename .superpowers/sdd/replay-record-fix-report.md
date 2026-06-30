@@ -20,7 +20,7 @@ Implemented. `replayCurrentTrack()` now records the current track only after `au
   - Passed 23 files, 141 tests. Expected stderr from negative/error-path tests was present.
 
 ## Commit hash(es)
-- `be3f090`
+- `c4aec8b`
 
 ## Self-review notes
 - `playTrack()` behavior is preserved: it still sets `currentTrack`, normalizes and assigns `audio.src`, updates UI/media session immediately, and starts playback immediately.
