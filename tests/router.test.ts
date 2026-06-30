@@ -14,6 +14,8 @@ vi.mock('../src/db.js', () => ({
   ]),
   addMessage: vi.fn(),
   getPref: vi.fn().mockReturnValue(null),
+  getPlayStatsAll: vi.fn().mockReturnValue([]),
+  setPref: vi.fn(),
 }));
 
 vi.mock('../src/claude.js', () => ({
@@ -30,6 +32,10 @@ vi.mock('../src/context.js', () => ({
   assemblePrompt: vi.fn().mockReturnValue('=== Assembled Prompt ==='),
 }));
 
+vi.mock('../src/predictor.js', () => ({
+  getSuggestedQueue: vi.fn().mockResolvedValue({ scene: { scene: 'casual', reason: 'test' }, say: 'hi', play: ['song'], reason: 'test' }),
+}));
+
 vi.mock('../src/adapters/netease.js', () => ({
   getNcmCookie: vi.fn().mockReturnValue('mock-cookie'),
   getPlaylistDetail: vi.fn(),
@@ -39,15 +45,17 @@ vi.mock('../src/adapters/netease.js', () => ({
   removeTracksFromPlaylist: vi.fn(),
 }));
 
-import { getRecentPlays } from '../src/db.js';
+import { getRecentPlays, getPref, setPref } from '../src/db.js';
 import { invokeClaude } from '../src/claude.js';
 import { assemblePrompt } from '../src/context.js';
+import { getSuggestedQueue } from '../src/predictor.js';
 
 describe('router', () => {
   let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getPref).mockReturnValue(null);
     app = createApp({ db: {} as any });
   });
   describe('POST /api/chat', () => {
@@ -72,6 +80,19 @@ describe('router', () => {
       expect(res.body.play).toBeDefined();
     });
 
+    it('does not call Claude when LLM is disabled', async () => {
+      vi.mocked(getPref).mockImplementation((_db, key) => key === 'llm_enabled' ? 'false' : null);
+
+      const res = await request(app)
+        .post('/api/chat')
+        .send({ text: '给我放适合工作的歌' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.claude).toBe(false);
+      expect(res.body.say).toContain('LLM 已禁用');
+      expect(invokeClaude).not.toHaveBeenCalled();
+    });
+
     it('assembles context before calling Claude', async () => {
       const res = await request(app)
         .post('/api/chat')
@@ -83,6 +104,41 @@ describe('router', () => {
       // prompt arg should contain the assembled prompt
       const promptArg = (invokeClaude as any).mock.calls[0][0];
       expect(promptArg).toContain('Assembled Prompt');
+    });
+  });
+
+  describe('GET /api/queue/suggested', () => {
+    it('does not call queue predictor when scene suggestions are disabled', async () => {
+      vi.mocked(getPref).mockImplementation((_db, key) => key === 'scene_suggestions_enabled' ? 'false' : null);
+      const executor = { getContext: vi.fn().mockResolvedValue({ weather: '', calendar: '' }) };
+      app = createApp({ db: {} as any, executor: executor as any });
+
+      const res = await request(app).get('/api/queue/suggested');
+
+      expect(res.status).toBe(200);
+      expect(res.body.enabled).toBe(false);
+      expect(res.body.play).toEqual([]);
+      expect(getSuggestedQueue).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('API config', () => {
+    it('returns scene suggestion toggle state', async () => {
+      vi.mocked(getPref).mockImplementation((_db, key) => key === 'scene_suggestions_enabled' ? 'false' : null);
+
+      const res = await request(app).get('/api/config');
+
+      expect(res.status).toBe(200);
+      expect(res.body.sceneSuggestionsEnabled).toBe(false);
+    });
+
+    it('persists scene suggestion toggle state', async () => {
+      const res = await request(app)
+        .post('/api/config')
+        .send({ sceneSuggestionsEnabled: false });
+
+      expect(res.status).toBe(200);
+      expect(setPref).toHaveBeenCalledWith(expect.anything(), 'scene_suggestions_enabled', 'false');
     });
   });
 

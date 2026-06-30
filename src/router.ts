@@ -315,6 +315,10 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       return res.status(503).json({ error: 'unavailable' });
     }
     try {
+      const suggestionEnabled = getPref(opts.db, 'scene_suggestions_enabled');
+      if (suggestionEnabled === 'false') {
+        return res.json({ enabled: false, scene: null, say: '', play: [], reason: '' });
+      }
       const { lat, lon } = req.query;
       const ctx = await opts.executor.getContext(
         (lat != null && lon != null) ? { lat: Number(lat), lon: Number(lon) } : undefined
@@ -354,12 +358,13 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     const ncmLoggedIn = !!getNcmCookie();
     const ncmQuality = env.NCM_QUALITY || getPref(opts.db, 'ncm_quality') || '';
     const llmEnabled = getPref(opts.db, 'llm_enabled');
-    res.json({ apiKey, baseUrl, apiModel, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir, ncmLoggedIn, ncmQuality, llmEnabled: llmEnabled !== 'false' });
+    const sceneSuggestionsEnabled = getPref(opts.db, 'scene_suggestions_enabled');
+    res.json({ apiKey, baseUrl, apiModel, ncmApi, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir, ncmLoggedIn, ncmQuality, llmEnabled: llmEnabled !== 'false', sceneSuggestionsEnabled: sceneSuggestionsEnabled !== 'false' });
   });
 
   app.post('/api/config', (req: Request, res: Response) => {
     if (!opts.db) return res.status(503).json({ error: 'DB unavailable' });
-    const { apiKey, baseUrl, apiModel, ncmApi, ncmQuality, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir, llmEnabled } = req.body;
+    const { apiKey, baseUrl, apiModel, ncmApi, ncmQuality, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir, llmEnabled, sceneSuggestionsEnabled } = req.body;
     // Secrets: skip empty or masked values to avoid overwriting with placeholder
     if (apiKey !== undefined && apiKey !== '' && !apiKey.includes('*')) {
       setPref(opts.db, 'api_key', apiKey);
@@ -386,6 +391,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     if (upnpDevices !== undefined) setPref(opts.db, 'upnp_devices', upnpDevices);
     if (userCorpusDir !== undefined) setPref(opts.db, 'user_corpus_dir', userCorpusDir);
     if (llmEnabled !== undefined) setPref(opts.db, 'llm_enabled', llmEnabled ? 'true' : 'false');
+    if (sceneSuggestionsEnabled !== undefined) setPref(opts.db, 'scene_suggestions_enabled', sceneSuggestionsEnabled ? 'true' : 'false');
 
     syncEnvFile({ ncmApi, ncmQuality, weatherKey, fishKey, feishuAppId, feishuAppSecret, upnpDevices, userCorpusDir });
 

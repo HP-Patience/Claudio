@@ -51,7 +51,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **WebSocket**: `ws` 库，path=`/stream`，用于实时推送 play/say/token_usage 事件到前端
 - **数据库**: SQLite via `better-sqlite3`（同步 API），文件 `state.db`
 - **LLM**: Anthropic Messages API (claude-sonnet-4-20250514) 或 OpenAI-compatible API (DeepSeek)，通过 `https.request` / `fetch`
-- **前端**: 单文件 [frontend/app.js](frontend/app.js) + HTML/CSS，无框架，由 Express 静态托管
+- **前端**: [frontend/index.html](frontend/index.html) + [frontend/style.css](frontend/style.css) + ES modules in [frontend/js/](frontend/js/)，无框架，由 Express 静态托管；PWA shell 在 [frontend/manifest.json](frontend/manifest.json) 和 [frontend/sw.js](frontend/sw.js)
 - **测试**: Vitest，测试文件在 `tests/`，supertest 做 HTTP 集成测试
 
 ## 开发命令

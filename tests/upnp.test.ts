@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { discoverDevices, setVolume, setPower } from '../src/adapters/upnp.js';
+import { discoverDevices, setVolume, setPower, setUpnpDevices } from '../src/adapters/upnp.js';
 
 describe('upnp adapter', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    process.env.UPNP_DEVICES = JSON.stringify([
+    setUpnpDevices([
       { id: 'device-1', name: 'Living Room Amp', host: 'http://192.168.1.100:8080' },
       { id: 'device-2', name: 'Bedroom Speaker', host: 'http://192.168.1.101:8080' },
     ]);

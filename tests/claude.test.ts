@@ -1,24 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EventEmitter } from 'node:events';
-
-function makeMockChild(stdoutData: string, delay = 0) {
-  const child = new EventEmitter();
-  (child as any).stdout = new EventEmitter();
-  (child as any).stderr = new EventEmitter();
-  (child as any).kill = vi.fn();
-
-  setTimeout(() => {
-    (child as any).stdout.emit('data', Buffer.from(stdoutData));
-    (child as any).stdout.emit('end');
-    child.emit('close', 0);
-  }, delay);
-
-  return child as any;
-}
-
-vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
-
-import { spawn } from 'node:child_process';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { invokeClaude, parseOutput } from '../src/claude.js';
 
 describe('parseOutput', () => {
@@ -65,53 +45,65 @@ describe('parseOutput', () => {
 });
 
 describe('invokeClaude', () => {
+  const originalKey = process.env.ANTHROPIC_API_KEY;
+  const originalModel = process.env.API_MODEL;
+
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    process.env.API_MODEL = 'claude-test-model';
   });
 
-  it('spawns with -p flag and prompt string', async () => {
-    const mockChild = makeMockChild(JSON.stringify({ say: 'Hi', play: [] }));
-    (spawn as any).mockReturnValue(mockChild);
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = originalKey;
+    if (originalModel === undefined) delete process.env.API_MODEL;
+    else process.env.API_MODEL = originalModel;
+  });
+
+  it('posts prompt to Anthropic Messages API', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({
+      content: [{ type: 'text', text: JSON.stringify({ say: 'Hi', play: [] }) }],
+    }), { status: 200 }));
 
     await invokeClaude('test prompt');
-    expect(spawn).toHaveBeenCalledWith('claude', ['-p', 'test prompt']);
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, options] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.anthropic.com/v1/messages');
+    expect(options.headers).toMatchObject({ 'x-api-key': 'test-key' });
+    expect(JSON.parse(options.body as string).messages[0].content).toBe('test prompt');
   });
 
-  it('returns parsed ClaudeOutput from stdout', async () => {
-    const mockChild = makeMockChild(
-      JSON.stringify({ say: 'Hi', play: ['123'], reason: 'test', segue: '' }),
-    );
-    (spawn as any).mockReturnValue(mockChild);
+  it('returns parsed ClaudeOutput from response text', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({
+      content: [{ type: 'text', text: JSON.stringify({ say: 'Hi', play: ['123'], reason: 'test', segue: '' }) }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    }), { status: 200 }));
 
     const result = await invokeClaude('play jazz');
     expect(result.say).toBe('Hi');
     expect(result.play).toEqual(['123']);
+    expect(result.usage).toEqual({ input_tokens: 10, output_tokens: 5, context_window: 200000 });
   });
 
   it('rejects on timeout', async () => {
-    const mockChild = makeMockChild('{}', 10000);
-    (spawn as any).mockReturnValue(mockChild);
+    vi.spyOn(globalThis, 'fetch').mockImplementationOnce((_url, options) => new Promise((_resolve, reject) => {
+      const signal = (options as RequestInit).signal as AbortSignal;
+      signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+    }));
 
-    await expect(invokeClaude('test', { timeout: 50 })).rejects.toThrow('timeout');
+    await expect(invokeClaude('test', { timeout: 10 })).rejects.toThrow('API 请求超时');
   });
 
-  it('rejects on non-zero exit code', async () => {
-    const child = new EventEmitter();
-    (child as any).stdout = new EventEmitter();
-    (child as any).stderr = new EventEmitter();
-    (spawn as any).mockReturnValue(child);
+  it('rejects on non-2xx API response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('Error', { status: 500 }));
 
-    setTimeout(() => {
-      (child as any).stderr.emit('data', Buffer.from('Error'));
-      (child as any).stdout.emit('end');
-      child.emit('close', 1);
-    }, 0);
-
-    await expect(invokeClaude('test')).rejects.toThrow('Claude exited with code 1');
+    await expect(invokeClaude('test')).rejects.toThrow('API 500: Error');
   });
 
-  it('handles spawn failure', async () => {
-    (spawn as any).mockReturnValue(null);
-    await expect(invokeClaude('test')).rejects.toThrow('Failed to spawn Claude');
+  it('rejects when API key is missing', async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    await expect(invokeClaude('test')).rejects.toThrow('API Key 未配置');
   });
 });
