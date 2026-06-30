@@ -101,6 +101,60 @@ export function getRecentPlays(db: Database.Database, limit: number) {
     .all(limit) as { song_id: string; song_name: string; artist: string; played_at: string }[];
 }
 
+export interface HistoryPlay {
+  song_id: string;
+  song_name: string;
+  artist: string;
+  played_at: string;
+}
+
+export interface HistoryPage {
+  items: HistoryPlay[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export function getPlayHistory(db: Database.Database, page = 1, pageSize = 20): HistoryPage {
+  const safePage = Math.max(1, Math.floor(Number(page) || 1));
+  const safePageSize = Math.min(20, Math.max(1, Math.floor(Number(pageSize) || 20)));
+  const offset = (safePage - 1) * safePageSize;
+
+  const uniqueCountRow = db.prepare(
+    "SELECT COUNT(*) AS count FROM (SELECT song_id FROM plays WHERE song_id <> '' GROUP BY song_id)",
+  ).get() as { count: number };
+  const total = Math.min(uniqueCountRow.count, 100);
+  const totalPages = total === 0 ? 0 : Math.ceil(total / safePageSize);
+
+  const items = db.prepare(`
+    WITH ranked AS (
+      SELECT
+        song_id,
+        song_name,
+        artist,
+        played_at,
+        id,
+        ROW_NUMBER() OVER (PARTITION BY song_id ORDER BY played_at DESC, id DESC) AS rn
+      FROM plays
+      WHERE song_id <> ''
+    ),
+    unique_plays AS (
+      SELECT song_id, song_name, artist, played_at, id
+      FROM ranked
+      WHERE rn = 1
+      ORDER BY played_at DESC, id DESC
+      LIMIT 100
+    )
+    SELECT song_id, song_name, artist, played_at
+    FROM unique_plays
+    ORDER BY played_at DESC, id DESC
+    LIMIT ? OFFSET ?
+  `).all(safePageSize, offset) as HistoryPlay[];
+
+  return { items, page: safePage, pageSize: safePageSize, total, totalPages };
+}
+
 export function setPlan(db: Database.Database, date: string, plan: unknown): void {
   db.prepare(
     'INSERT INTO plan (date, plan_json) VALUES (?, ?) ON CONFLICT(date) DO UPDATE SET plan_json = excluded.plan_json',
