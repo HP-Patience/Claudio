@@ -136,13 +136,15 @@ export function createExecutor() {
       return items;
     },
 
-    getContext: async (opts?: { lat?: number; lon?: number }) => {
-      const lat = opts?.lat;
-      const lon = opts?.lon;
+    getContext: async (opts?: { lat?: number; lon?: number } | string) => {
+      const lat = typeof opts === 'string' ? undefined : opts?.lat;
+      const lon = typeof opts === 'string' ? undefined : opts?.lon;
       const [weatherResult, events] = await Promise.allSettled([
-        (lat != null && lon != null)
-          ? getCurrentWeatherByCoords(lat, lon)
-          : Promise.reject(new Error('no location')),
+        typeof opts === 'string'
+          ? getCurrentWeather(opts)
+          : (lat != null && lon != null)
+            ? getCurrentWeatherByCoords(lat, lon)
+            : Promise.reject(new Error('no location')),
         getTodayEvents(),
       ]);
 

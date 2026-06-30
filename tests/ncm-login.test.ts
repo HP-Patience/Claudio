@@ -1,6 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { chromium, type Browser, type Page } from 'playwright';
 import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
 
 let server: http.Server;
 let shutdown: () => Promise<void>;
@@ -9,6 +11,7 @@ let page: Page;
 let baseUrl: string;
 
 beforeAll(async () => {
+  process.env.DB_PATH = path.join(os.tmpdir(), `claudio-ncm-login-${Date.now()}.db`);
   const { start } = await import('../src/server.js');
   const result = await start({ port: 0 });
   server = result.server;
@@ -17,11 +20,19 @@ beforeAll(async () => {
   baseUrl = `http://localhost:${addr.port}`;
   browser = await chromium.launch({ headless: true });
   page = await browser.newPage();
+  await page.route('**/api/status/ncm', route => route.fulfill({ json: { online: false, vipType: 0 } }));
+  await page.route('**/api/ncm/login/qr/key', route => route.fulfill({ json: { data: { unikey: 'test-key' } } }));
+  await page.route('**/api/ncm/login/qr/create', route => route.fulfill({ json: { data: { qrimg: 'data:image/png;base64,iVBORw0KGgo=' } } }));
+  await page.route('**/api/ncm/login/qr/check', route => route.fulfill({ json: { code: 801 } }));
 });
 
 afterAll(async () => {
   await browser.close();
   if (shutdown) await shutdown();
+});
+
+beforeEach(async () => {
+  await fetch(`${baseUrl}/api/ncm/logout`, { method: 'POST' });
 });
 
 async function openLoginModal() {

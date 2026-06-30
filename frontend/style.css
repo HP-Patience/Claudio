@@ -268,7 +268,7 @@ body {
 
 .player-bottom { margin-top: 10px; }
 .progress-container {
-  width: 100%; height: 8px; background: var(--border);
+  width: 100%; height: 7px; background: var(--border);
   border-radius: 4px; cursor: pointer; position: relative;
 }
 #progress-bar {
@@ -580,7 +580,7 @@ body {
 }
 
 .form-group { display: flex; flex-direction: column; gap: 6px; }
-.toggle-group { flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; }
+.toggle-group { flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 6px; }
 .toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; cursor: pointer; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; }
 .toggle-slider { position: absolute; inset: 0; background: var(--bg-hover); border-radius: 24px; transition: .2s; }
@@ -873,6 +873,17 @@ select.form-input { appearance: auto; cursor: pointer; }
   font-size: 11px; color: var(--text-muted);
   font-family: var(--font-mono);
 }
+.playlist-mode-btn {
+  margin-top: 10px; padding: 6px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-surface); color: var(--text-secondary);
+  font-size: 11px; cursor: pointer; transition: all .15s;
+}
+.playlist-mode-btn:hover,
+.playlist-mode-btn.active {
+  border-color: var(--accent); color: var(--accent);
+  background: var(--accent-glow);
+}
 
 .playlist-tracks {
   flex: 1; min-height: 0; overflow-y: auto;
@@ -975,3 +986,188 @@ select.form-input { appearance: auto; cursor: pointer; }
   accent-color: var(--accent);
 }
 .modal-sm { max-width: 380px; }
+
+/* Motion polish */
+.panel {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity .2s, transform .2s;
+}
+.panel.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-card {
+  animation: toastIn .3s ease;
+}
+.toast-card.out {
+  animation: toastOut .2s ease forwards;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes toastOut {
+  to { opacity: 0; transform: translateY(-8px); }
+}
+
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+}
+.typing-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: typingDot 1s infinite ease-in-out;
+}
+.typing-dots span:nth-child(2) { animation-delay: .15s; }
+.typing-dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes typingDot {
+  0%, 80%, 100% { opacity: .35; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-3px); }
+}
+
+@media (max-width: 768px) {
+  .transport-bar {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .transport-right {
+    gap: 8px;
+  }
+
+  .nav,
+  .player,
+  .chat-section,
+  .input-section,
+  .footer {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  * {
+    touch-action: manipulation;
+  }
+
+  body {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  #app {
+    max-width: none;
+    width: 100vw;
+    min-height: 100vh;
+    min-height: 100dvh;
+    border-radius: 0;
+    border: 0;
+    box-shadow: none;
+  }
+
+  #app::before {
+    border-radius: 0;
+  }
+
+  .nav {
+    padding: 12px 16px;
+  }
+
+  .nav-actions {
+    gap: 6px;
+  }
+
+  .nav-btn {
+    padding: 6px 10px;
+  }
+
+  .clock-section {
+    padding: 28px 16px 36px;
+  }
+
+  .clock-display {
+    font-size: clamp(44px, 16vw, 64px);
+  }
+
+  .player {
+    padding: 16px;
+  }
+
+  .transport-bar {
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .transport-left,
+  .transport-right #volume {
+    display: none;
+  }
+
+  .transport-center,
+  .transport-right {
+    gap: 8px;
+  }
+
+  .ctrl-btn {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .ctrl-btn.text {
+    padding: 0 8px;
+  }
+
+  .chat-section {
+    padding: 14px 16px 0;
+  }
+
+  .chat-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .chat-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chat-tab {
+    flex-shrink: 0;
+  }
+
+  .modal {
+    width: 92vw;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+
+  .input-section {
+    padding: 10px 16px;
+  }
+
+  .input-row {
+    gap: 8px;
+  }
+
+  #chat-input {
+    height: 48px;
+    font-size: 16px;
+  }
+
+  .send-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+  }
+
+  .footer {
+    padding: 8px 16px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+}
