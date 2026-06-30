@@ -21,4 +21,31 @@ describe('frontend polish', () => {
     expect(source).toContain('removeLoadingMessage');
     expect(source).toContain('typing-dots');
   });
+
+  it('defines a history tab and panel container', () => {
+    const html = fs.readFileSync(path.resolve('frontend/index.html'), 'utf-8');
+
+    expect(html).toContain('data-tab="history"');
+    expect(html).toContain('id="history-panel"');
+  });
+
+  it('wires the history panel through main and dom modules', () => {
+    const domSource = fs.readFileSync(path.resolve('frontend/js/dom.js'), 'utf-8');
+    const mainSource = fs.readFileSync(path.resolve('frontend/js/main.js'), 'utf-8');
+
+    expect(domSource).toContain('historyPanel');
+    expect(mainSource).toContain("./history-panel.js");
+    expect(mainSource).toContain("target === 'history'");
+    expect(mainSource).toContain('renderHistoryPanel');
+  });
+
+  it('history panel implements loading, empty, failure, pagination, and replay states', () => {
+    const source = fs.readFileSync(path.resolve('frontend/js/history-panel.js'), 'utf-8');
+
+    expect(source).toContain('/api/history?page=');
+    expect(source).toContain('暂无播放记录');
+    expect(source).toContain('加载历史失败');
+    expect(source).toContain('history-pagination');
+    expect(source).toContain('/api/play/by-id');
+  });
 });

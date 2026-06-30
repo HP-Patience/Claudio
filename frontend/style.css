@@ -397,6 +397,44 @@ body {
   font-size: 11px; color: var(--text-muted); margin-top: 1px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.history-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  opacity: 0.75;
+}
+
+.history-pagination {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 0 4px;
+}
+
+.history-page-btn,
+.history-retry {
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 5px 9px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.history-page-btn:hover,
+.history-retry:hover,
+.history-page-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.history-page-btn:disabled {
+  cursor: default;
+  opacity: 1;
+}
 .track-action {
   width: 28px; height: 28px;
   display: flex; align-items: center; justify-content: center;

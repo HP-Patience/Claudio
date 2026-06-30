@@ -11,6 +11,7 @@ import * as queuePanel from './queue-panel.js';
 import * as favsPanel from './favs-panel.js';
 import * as statsPanel from './stats-panel.js';
 import * as playlistsPanel from './playlists-panel.js';
+import * as historyPanel from "./history-panel.js";
 import * as settings from './settings.js';
 import * as ncmAuth from './ncm-auth.js';
 import * as ws from './ws.js';
@@ -59,15 +60,18 @@ document.querySelectorAll('.chat-tab').forEach(tab => {
     dom.favsPanel.style.display = target === 'favs' ? '' : 'none';
     dom.statsPanel.style.display = target === 'stats' ? '' : 'none';
     dom.playlistsPanel.style.display = target === 'playlists' ? '' : 'none';
+    dom.historyPanel.style.display = target === 'history' ? '' : 'none';
     dom.chatPanel.classList.toggle('active', target === 'chat');
     dom.queuePanel.classList.toggle('active', target === 'queue');
     dom.favsPanel.classList.toggle('active', target === 'favs');
     dom.statsPanel.classList.toggle('active', target === 'stats');
     dom.playlistsPanel.classList.toggle('active', target === 'playlists');
+    dom.historyPanel.classList.toggle('active', target === 'history');
     if (target === 'queue') queuePanel.renderQueuePanel();
     if (target === 'favs') favsPanel.renderFavsPanel();
     if (target === 'stats') statsPanel.renderStatsPanel();
     if (target === 'playlists') playlistsPanel.renderPlaylistsPanel();
+    if (target === 'history') historyPanel.renderHistoryPanel();
   });
 });
 
