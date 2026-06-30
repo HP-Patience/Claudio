@@ -1,7 +1,7 @@
 import express from 'express';
 import type { Express, Request, Response, NextFunction } from 'express';
 import type Database from 'better-sqlite3';
-import { getRecentPlays, getPlan, addMessage, getMessages, getPref, setPref, addFavorite, removeFavorite, isFavorite, getFavorites, addHiddenSong, getPlayStats, getPlayStatsAll } from './db.js';
+import { getRecentPlays, getPlayHistory, getPlan, addMessage, addPlay, getMessages, getPref, setPref, addFavorite, removeFavorite, isFavorite, getFavorites, addHiddenSong, getPlayStats, getPlayStatsAll } from './db.js';
 import { invokeClaude } from './claude.js';
 import { assemblePrompt } from './context.js';
 import { getSuggestedQueue } from './predictor.js';
@@ -112,6 +112,21 @@ interface RouterOptions {
 export function createApp(opts: RouterOptions = {}): Express {
   const app = express();
   app.use(express.json());
+
+  function recordPlayedItems(items: unknown): void {
+    if (!opts.db) return;
+    const list = Array.isArray(items) ? items : [items];
+    for (const item of list) {
+      if (!item || typeof item !== 'object') continue;
+      const playable = item as { songId?: string | number; name?: string; artist?: string };
+      if (!playable.songId) continue;
+      addPlay(opts.db, {
+        song_id: String(playable.songId),
+        song_name: playable.name ?? '',
+        artist: playable.artist ?? '',
+      });
+    }
+  }
 
   app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -272,6 +287,10 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       }
     }
 
+    if (playedItems && playedItems.length > 0) {
+      recordPlayedItems(playedItems);
+    }
+
     // Handle TTS for the say message
     if (opts.executor && result.say) {
       opts.executor.acquireSpeaker();
@@ -302,6 +321,13 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
   app.get('/api/now', (_req: Request, res: Response) => {
     const queue = opts.db ? getRecentPlays(opts.db, 20) : [];
     res.json({ current: queue[0] ?? null, queue });
+  });
+
+  app.get('/api/history', (req: Request, res: Response) => {
+    const page = Number(req.query.page ?? 1);
+    const pageSize = Number(req.query.pageSize ?? 20);
+    if (!opts.db) return res.json({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 0 });
+    res.json(getPlayHistory(opts.db, page, pageSize));
   });
 
   app.get('/api/queue', (_req: Request, res: Response) => {
@@ -772,6 +798,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       if (!item) return res.status(502).json({ error: 'FM API returned no song' });
       broadcast('play', { tracks: [item], fm: true });
       if (opts.db) addMessage(opts.db, { role: 'assistant', content: `Playing: ${item.name} by ${item.artist}` });
+      recordPlayedItems(item);
       res.json(item);
     } catch (err) {
       next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
@@ -791,6 +818,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
           addMessage(opts.db, { role: 'assistant', content: `Playing: ${item.name} by ${item.artist}` });
         }
       }
+      recordPlayedItems(items);
       res.json(items);
     } catch (err) {
       next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
@@ -805,6 +833,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       const item = await opts.executor.getNextFMSong();
       if (!item) return res.status(502).json({ error: 'FM API returned no song' });
       broadcast('play', { tracks: [item], fm: true });
+      recordPlayedItems(item);
       res.json(item);
     } catch (err) {
       next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));
@@ -829,6 +858,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       if (!detail) return res.status(404).json({ error: 'song not found' });
 
       const item = { songId: String(detail.id), name: detail.name, artist: detail.artist, url };
+      recordPlayedItems(item);
       res.json(item);
     } catch (err) {
       next(new AppError('CLAUDIO_ERR_API', err instanceof Error ? err.message : String(err), 502));
@@ -861,6 +891,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
         return { songId: String(s.id), name: s.name, artist: s.artist, url };
       }));
 
+      recordPlayedItems(items);
       res.json({ songs: items });
     } catch (err) {
       next(new AppError('CLAUDIO_ERR_API', err instanceof Error ? err.message : String(err), 502));
@@ -878,6 +909,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
 
       const url = await getSongUrl(Number(songs[0].id));
       const item = { songId: String(songs[0].id), name: songs[0].name, artist: songs[0].artist, url };
+      recordPlayedItems(item);
       res.json(item);
     } catch (err) {
       next(new AppError('CLAUDIO_ERR_API', err instanceof Error ? err.message : String(err), 502));
