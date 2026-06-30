@@ -117,8 +117,10 @@ export interface HistoryPage {
 }
 
 export function getPlayHistory(db: Database.Database, page = 1, pageSize = 20): HistoryPage {
-  const safePage = Math.max(1, Math.floor(Number(page) || 1));
-  const safePageSize = Math.min(20, Math.max(1, Math.floor(Number(pageSize) || 20)));
+  const rawPage = Number(page);
+  const rawPageSize = Number(pageSize);
+  const safePage = Number.isFinite(rawPage) ? Math.max(1, Math.floor(rawPage)) : 1;
+  const safePageSize = Number.isFinite(rawPageSize) ? Math.min(20, Math.max(1, Math.floor(rawPageSize))) : 20;
   const offset = (safePage - 1) * safePageSize;
 
   const uniqueCountRow = db.prepare(

@@ -49,11 +49,25 @@ describe('frontend polish', () => {
     expect(source).toContain('/api/play/by-id');
   });
 
-  it('audio core records history only from the actual playTrack path', () => {
+  it('audio core records history only after the actual play promise resolves', () => {
     const source = fs.readFileSync(path.resolve('frontend/js/audio-core.js'), 'utf-8');
 
-    expect(source).toContain('export function playTrack(item)');
-    expect(source).toContain("fetch('/api/history/record'");
-    expect(source.indexOf('export function playTrack(item)')).toBeLessThan(source.indexOf("fetch('/api/history/record'"));
+    expect(source).toContain('function recordPlayback(item)');
+    expect(source).toContain('let playRequestToken = 0');
+    expect(source).toContain('audio.play()');
+    expect(source).toContain('.then(() => {');
+    expect(source).toContain('recordPlayback(item)');
+    const playTrackSource = source.slice(source.indexOf('export function playTrack(item)'), source.indexOf('function updateMediaSession(item)'));
+    expect(playTrackSource.indexOf('.then(() => {')).toBeLessThan(playTrackSource.indexOf('recordPlayback(item)'));
+  });
+
+  it('FM next playback uses the shared playTrack path', () => {
+    const source = fs.readFileSync(path.resolve('frontend/js/audio-core.js'), 'utf-8');
+    const fmStart = source.indexOf('async function fetchNextFm()');
+    const fmEnd = source.indexOf('export async function exitMode()');
+    const fmSource = source.slice(fmStart, fmEnd);
+
+    expect(fmSource).toContain('playTrack(item)');
+    expect(fmSource).not.toContain('state.currentTrack = item');
   });
 });

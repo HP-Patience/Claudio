@@ -108,6 +108,17 @@ describe('db', () => {
     expect(history.items[0].song_id).toBe('123');
   });
 
+  it('getPlayHistory normalizes non-finite pagination values', () => {
+    addPlay(db, { song_id: '123', song_name: 'Test Song', artist: 'Test Artist' });
+
+    expect(() => getPlayHistory(db, Infinity, Infinity)).not.toThrow();
+
+    const history = getPlayHistory(db, Infinity, Infinity);
+    expect(history.page).toBe(1);
+    expect(history.pageSize).toBe(20);
+    expect(history.items).toHaveLength(1);
+  });
+
   it('setPlan and getPlan store and retrieve daily plan', () => {
     const planData = { songs: ['id1', 'id2'], theme: 'morning' };
     setPlan(db, '2026-06-09', planData);

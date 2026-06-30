@@ -191,18 +191,29 @@ export function setPlayMode(mode) {
   dom.playModeDropdown.style.display = 'none';
 }
 
+function recordPlayback(item) {
+  if (!item.songId) return;
+  fetch('/api/history/record', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ songId: item.songId, name: item.name, artist: item.artist }),
+  }).catch((err) => console.warn('[history] record failed', err));
+}
+
+let playRequestToken = 0;
+
 export function playTrack(item) {
   if (!item || !item.url) return;
+  const token = ++playRequestToken;
   state.currentTrack = item;
-  if (item.songId) {
-    fetch('/api/history/record', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ songId: item.songId, name: item.name, artist: item.artist }),
-    }).catch((err) => console.warn('[history] record failed', err));
-  }
   audio.src = resolveAudioUrl(item.url);
-  audio.play().catch(() => {});
+  audio.play()
+    .then(() => {
+      if (token === playRequestToken && state.currentTrack === item && audio.src === resolveAudioUrl(item.url)) {
+        recordPlayback(item);
+      }
+    })
+    .catch(() => {});
   dom.nowPlaying.textContent = `${item.name} - ${item.artist}`;
   dom.onAir.classList.add('active');
   addChatMessage(`🎵 Now playing: ${item.name} — ${item.artist}`, 'system');
@@ -274,9 +285,9 @@ async function fetchNextFm() {
     if (!res.ok) { state.isFmMode = false; updateModeDisplay(); showModeToast('FM 播放结束'); return; }
     const item = await res.json();
     if (!item || !item.url) { state.isFmMode = false; updateModeDisplay(); showModeToast('FM 播放结束'); return; }
-    state.currentTrack = item;
-    dom.nowPlaying.textContent = `${item.name} - ${item.artist}`;
-    dom.onAir.classList.add('active');
+    playTrack(item);
+    state.isFmMode = true;
+    updateModeDisplay();
   } catch {
     state.isFmMode = false;
     updateModeDisplay();
