@@ -58,10 +58,35 @@ describe('frontend polish', () => {
     expect(source).toContain('.then(() => {');
     expect(source).toContain('recordPlayback(item)');
     const playTrackSource = source.slice(source.indexOf('export function playTrack(item)'), source.indexOf('function updateMediaSession(item)'));
+    const helperSource = source.slice(source.indexOf('function recordConfirmedPlayback(item, token, expectedUrl)'), source.indexOf('export function playTrack(item)'));
     expect(playTrackSource).toContain('const audioUrl = resolveAudioUrl(item.url)');
     expect(playTrackSource).toContain('audio.src = audioUrl');
-    expect(playTrackSource).not.toContain('audio.src === resolveAudioUrl(item.url)');
-    expect(playTrackSource.indexOf('.then(() => {')).toBeLessThan(playTrackSource.indexOf('recordPlayback(item)'));
+    expect(playTrackSource).toContain('recordConfirmedPlayback(item, token, audio.src)');
+    expect(helperSource).toContain('.then(() => {');
+    expect(helperSource.indexOf('.then(() => {')).toBeLessThan(helperSource.indexOf('recordPlayback(item)'));
+  });
+
+  it('single-repeat replay records history after the actual replay promise resolves', () => {
+    const source = fs.readFileSync(path.resolve('frontend/js/audio-core.js'), 'utf-8');
+    const helperStart = source.indexOf('function recordConfirmedPlayback(item, token, expectedUrl)');
+    const helperEnd = source.indexOf('export function playTrack(item)');
+    const helperSource = source.slice(helperStart, helperEnd);
+    const replayStart = source.indexOf('function replayCurrentTrack()');
+    const replayEnd = source.indexOf('let _fetchingFm = false');
+    const replaySource = source.slice(replayStart, replayEnd);
+
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperSource).toContain('audio.play()');
+    expect(helperSource).toContain('.then(() => {');
+    expect(helperSource).toContain('token === playRequestToken');
+    expect(helperSource).toContain('state.currentTrack === item');
+    expect(helperSource).toContain('audio.src === expectedUrl');
+    expect(helperSource).toContain('recordPlayback(item)');
+    expect(helperSource.indexOf('.then(() => {')).toBeLessThan(helperSource.indexOf('recordPlayback(item)'));
+    expect(replaySource).toContain('const token = ++playRequestToken');
+    expect(replaySource).toContain('const audioUrl = audio.src');
+    expect(replaySource).toContain('return recordConfirmedPlayback(item, token, audioUrl)');
+    expect(replaySource).not.toContain('audio.play().catch(() => {})');
   });
 
   it('FM next playback uses the shared playTrack path', () => {

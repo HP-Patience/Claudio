@@ -50,7 +50,7 @@ async function playHistoryItem(item, button) {
     }
     state.queue.unshift(playable);
     setQueue(state.queue);
-    playTrack(playable);
+    await playTrack(playable);
     await renderHistoryPanel(1);
   } catch {
     showModeToast('历史歌曲播放失败');
