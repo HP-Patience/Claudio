@@ -824,7 +824,6 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     try {
       const item = await opts.executor.getNextFMSong();
       if (!item) return res.status(502).json({ error: 'FM API returned no song' });
-      broadcast('play', { tracks: [item], fm: true });
       res.json(item);
     } catch (err) {
       next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));

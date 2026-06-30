@@ -42,6 +42,10 @@ vi.mock('../src/context.js', () => ({
   assemblePrompt: vi.fn().mockReturnValue('=== Assembled Prompt ==='),
 }));
 
+vi.mock('../src/ws.js', () => ({
+  broadcast: vi.fn(),
+}));
+
 vi.mock('../src/predictor.js', () => ({
   getSuggestedQueue: vi.fn().mockResolvedValue({ scene: { scene: 'casual', reason: 'test' }, say: 'hi', play: ['song'], reason: 'test' }),
 }));
@@ -62,6 +66,7 @@ import { getRecentPlays, getPlayHistory, getPref, setPref, addPlay } from '../sr
 import { invokeClaude } from '../src/claude.js';
 import { assemblePrompt } from '../src/context.js';
 import { getSuggestedQueue } from '../src/predictor.js';
+import { broadcast } from '../src/ws.js';
 
 describe('router', () => {
   let app: ReturnType<typeof createApp>;
@@ -243,6 +248,23 @@ describe('router', () => {
 
       expect(res.status).toBe(400);
       expect(addPlay).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('FM playback', () => {
+    it('returns next FM song without broadcasting play event', async () => {
+      const item = { songId: '456', name: 'FM Song', artist: 'FM Artist', url: 'https://music.126.net/fm.mp3' };
+      const executor = {
+        getPlayState: vi.fn().mockReturnValue({ isFmMode: true }),
+        getNextFMSong: vi.fn().mockResolvedValue(item),
+      };
+      app = createApp({ db: {} as any, executor: executor as any });
+
+      const res = await request(app).post('/api/play/fm/next');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(item);
+      expect(broadcast).not.toHaveBeenCalledWith('play', expect.anything());
     });
   });
 
