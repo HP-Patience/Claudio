@@ -12,7 +12,17 @@ vi.mock('../src/db.js', () => ({
   getRecentPlays: vi.fn().mockReturnValue([
     { song_id: '789', song_name: 'Take Five', artist: 'Dave Brubeck', played_at: '2026-06-09 08:00' },
   ]),
+  getPlayHistory: vi.fn().mockReturnValue({
+    items: [
+      { song_id: '789', song_name: 'Take Five', artist: 'Dave Brubeck', played_at: '2026-06-09 08:00' },
+    ],
+    page: 1,
+    pageSize: 20,
+    total: 1,
+    totalPages: 1,
+  }),
   addMessage: vi.fn(),
+  addPlay: vi.fn(),
   getPref: vi.fn().mockReturnValue(null),
   getPlayStatsAll: vi.fn().mockReturnValue([]),
   setPref: vi.fn(),
@@ -32,6 +42,10 @@ vi.mock('../src/context.js', () => ({
   assemblePrompt: vi.fn().mockReturnValue('=== Assembled Prompt ==='),
 }));
 
+vi.mock('../src/ws.js', () => ({
+  broadcast: vi.fn(),
+}));
+
 vi.mock('../src/predictor.js', () => ({
   getSuggestedQueue: vi.fn().mockResolvedValue({ scene: { scene: 'casual', reason: 'test' }, say: 'hi', play: ['song'], reason: 'test' }),
 }));
@@ -43,12 +57,16 @@ vi.mock('../src/adapters/netease.js', () => ({
   getUserPlaylists: vi.fn().mockResolvedValue([]),
   createPlaylist: vi.fn(),
   removeTracksFromPlaylist: vi.fn(),
+  getSongUrl: vi.fn().mockResolvedValue('https://music.126.net/mock.mp3'),
+  getSongDetail: vi.fn().mockResolvedValue({ id: 123, name: 'Mock Song', artist: 'Mock Artist', album: 'Mock Album' }),
+  getSimilarSongs: vi.fn().mockResolvedValue([{ id: 456, name: 'Similar Song', artist: 'Similar Artist', album: 'Similar Album' }]),
 }));
 
-import { getRecentPlays, getPref, setPref } from '../src/db.js';
+import { getRecentPlays, getPlayHistory, getPref, setPref, addPlay } from '../src/db.js';
 import { invokeClaude } from '../src/claude.js';
 import { assemblePrompt } from '../src/context.js';
 import { getSuggestedQueue } from '../src/predictor.js';
+import { broadcast } from '../src/ws.js';
 
 describe('router', () => {
   let app: ReturnType<typeof createApp>;
@@ -158,6 +176,95 @@ describe('router', () => {
       expect(res.body.queue).toHaveLength(1);
       expect(res.body.queue[0].song_name).toBe('Take Five');
       expect(res.body.queue[0].artist).toBe('Dave Brubeck');
+    });
+  });
+
+  describe('GET /api/history', () => {
+    it('returns paginated unique play history from DB', async () => {
+      const res = await request(app).get('/api/history?page=2&pageSize=10');
+
+      expect(res.status).toBe(200);
+      expect(getPlayHistory).toHaveBeenCalledWith(expect.anything(), 2, 10);
+      expect(res.body.items[0].song_name).toBe('Take Five');
+      expect(res.body.totalPages).toBe(1);
+    });
+
+    it('returns an empty history when DB is unavailable', async () => {
+      const appWithoutDb = createApp();
+
+      const res = await request(appWithoutDb).get('/api/history');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 0 });
+    });
+  });
+
+  describe('play history recording', () => {
+    it('does not record direct play by id before the browser starts playback', async () => {
+      const res = await request(app)
+        .post('/api/play/by-id')
+        .send({ songId: '123' });
+
+      expect(res.status).toBe(200);
+      expect(addPlay).not.toHaveBeenCalled();
+    });
+
+    it('does not record chat executor results before the browser starts playback', async () => {
+      const executor = {
+        getContext: vi.fn().mockResolvedValue({ weather: '', calendar: '' }),
+        executePlay: vi.fn().mockResolvedValue([
+          { songId: '321', name: 'Chat Song', artist: 'Chat Artist', url: 'https://music.126.net/chat.mp3' },
+        ]),
+        acquireSpeaker: vi.fn(),
+      };
+      app = createApp({ db: {} as any, executor: executor as any });
+
+      const res = await request(app)
+        .post('/api/chat')
+        .send({ text: '播放爵士乐' });
+
+      expect(res.status).toBe(200);
+      expect(addPlay).not.toHaveBeenCalled();
+    });
+
+    it('records browser-confirmed playback events', async () => {
+      const res = await request(app)
+        .post('/api/history/record')
+        .send({ songId: '123', name: 'Mock Song', artist: 'Mock Artist' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ ok: true });
+      expect(addPlay).toHaveBeenCalledWith(expect.anything(), {
+        song_id: '123',
+        song_name: 'Mock Song',
+        artist: 'Mock Artist',
+      });
+    });
+
+    it('rejects browser playback records without songId', async () => {
+      const res = await request(app)
+        .post('/api/history/record')
+        .send({ name: 'Missing Song ID' });
+
+      expect(res.status).toBe(400);
+      expect(addPlay).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('FM playback', () => {
+    it('returns next FM song without broadcasting play event', async () => {
+      const item = { songId: '456', name: 'FM Song', artist: 'FM Artist', url: 'https://music.126.net/fm.mp3' };
+      const executor = {
+        getPlayState: vi.fn().mockReturnValue({ isFmMode: true }),
+        getNextFMSong: vi.fn().mockResolvedValue(item),
+      };
+      app = createApp({ db: {} as any, executor: executor as any });
+
+      const res = await request(app).post('/api/play/fm/next');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(item);
+      expect(broadcast).not.toHaveBeenCalledWith('play', expect.anything());
     });
   });
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
-import { initDb, addMessage, getMessages, addPlay, getRecentPlays, setPlan, getPlan, setPref, getPref, cleanup } from '../src/db.js';
+import { initDb, addMessage, getMessages, addPlay, getRecentPlays, getPlayHistory, setPlan, getPlan, setPref, getPref, cleanup } from '../src/db.js';
 import fs from 'node:fs';
 
 describe('db', () => {
@@ -52,6 +52,71 @@ describe('db', () => {
     expect(plays).toHaveLength(2);
     expect(plays[0].song_id).toBe('456');
     expect(plays[1].song_id).toBe('123');
+  });
+
+  it('getPlayHistory returns latest unique songs with duplicate raw plays collapsed', () => {
+    db.prepare("INSERT INTO plays (song_id, song_name, artist, played_at) VALUES (?, ?, ?, ?)")
+      .run('123', 'Old Name', 'Old Artist', '2026-06-30 08:00:00');
+    db.prepare("INSERT INTO plays (song_id, song_name, artist, played_at) VALUES (?, ?, ?, ?)")
+      .run('456', 'Another', 'Artist2', '2026-06-30 09:00:00');
+    db.prepare("INSERT INTO plays (song_id, song_name, artist, played_at) VALUES (?, ?, ?, ?)")
+      .run('123', 'New Name', 'New Artist', '2026-06-30 10:00:00');
+
+    const history = getPlayHistory(db, 1, 20);
+
+    expect(history).toEqual({
+      items: [
+        { song_id: '123', song_name: 'New Name', artist: 'New Artist', played_at: '2026-06-30 10:00:00' },
+        { song_id: '456', song_name: 'Another', artist: 'Artist2', played_at: '2026-06-30 09:00:00' },
+      ],
+      page: 1,
+      pageSize: 20,
+      total: 2,
+      totalPages: 1,
+    });
+  });
+
+  it('getPlayHistory paginates the latest 100 unique songs', () => {
+    for (let i = 1; i <= 105; i += 1) {
+      db.prepare("INSERT INTO plays (song_id, song_name, artist, played_at) VALUES (?, ?, ?, datetime('2026-06-30 00:00:00', ? || ' minutes'))")
+        .run(String(i), `Song ${i}`, `Artist ${i}`, i);
+    }
+
+    const pageOne = getPlayHistory(db, 1, 20);
+    const pageFive = getPlayHistory(db, 5, 20);
+    const pageSix = getPlayHistory(db, 6, 20);
+
+    expect(pageOne.total).toBe(100);
+    expect(pageOne.totalPages).toBe(5);
+    expect(pageOne.items).toHaveLength(20);
+    expect(pageOne.items[0].song_id).toBe('105');
+    expect(pageFive.items).toHaveLength(20);
+    expect(pageFive.items[19].song_id).toBe('6');
+    expect(pageSix.items).toEqual([]);
+    expect(pageSix.totalPages).toBe(5);
+  });
+
+  it('getPlayHistory ignores records without song_id', () => {
+    db.prepare("INSERT INTO plays (song_id, song_name, artist, played_at) VALUES (?, ?, ?, ?)")
+      .run('', 'Broken', 'Unknown', '2026-06-30 08:00:00');
+    db.prepare("INSERT INTO plays (song_id, song_name, artist, played_at) VALUES (?, ?, ?, ?)")
+      .run('123', 'Valid', 'Artist', '2026-06-30 09:00:00');
+
+    const history = getPlayHistory(db, 1, 20);
+
+    expect(history.items).toHaveLength(1);
+    expect(history.items[0].song_id).toBe('123');
+  });
+
+  it('getPlayHistory normalizes non-finite pagination values', () => {
+    addPlay(db, { song_id: '123', song_name: 'Test Song', artist: 'Test Artist' });
+
+    expect(() => getPlayHistory(db, Infinity, Infinity)).not.toThrow();
+
+    const history = getPlayHistory(db, Infinity, Infinity);
+    expect(history.page).toBe(1);
+    expect(history.pageSize).toBe(20);
+    expect(history.items).toHaveLength(1);
   });
 
   it('setPlan and getPlan store and retrieve daily plan', () => {

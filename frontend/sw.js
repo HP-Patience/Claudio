@@ -1,4 +1,4 @@
-const CACHE_NAME = 'claudio-fm-v2';
+const CACHE_NAME = 'claudio-fm-v1';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -25,12 +25,6 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-
-  const url = new URL(event.request.url);
-  if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) {
-    event.respondWith(fetch(event.request));
-    return;
-  }
 
   event.respondWith(
     caches.match(event.request).then((cached) => {

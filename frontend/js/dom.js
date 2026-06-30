@@ -75,6 +75,7 @@ export const dom = {
   pwdLoginBtn: $('#pwd-login-btn'),
   pwdLoginStatus: $('#pwd-login-status'),
   playlistsPanel: $('#playlists-panel'),
+  historyPanel: $('#history-panel'),
   addToPlaylistBtn: $('#add-to-playlist-btn'),
   addToPlaylistDropdown: $('#add-to-playlist-dropdown'),
   playModeBtn: $('#playmode-btn'),

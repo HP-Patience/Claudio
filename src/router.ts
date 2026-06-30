@@ -1,7 +1,7 @@
 import express from 'express';
 import type { Express, Request, Response, NextFunction } from 'express';
 import type Database from 'better-sqlite3';
-import { getRecentPlays, getPlan, addMessage, getMessages, getPref, setPref, addFavorite, removeFavorite, isFavorite, getFavorites, addHiddenSong, getPlayStats, getPlayStatsAll } from './db.js';
+import { getRecentPlays, getPlayHistory, getPlan, addMessage, addPlay, getMessages, getPref, setPref, addFavorite, removeFavorite, isFavorite, getFavorites, addHiddenSong, getPlayStats, getPlayStatsAll } from './db.js';
 import { invokeClaude } from './claude.js';
 import { assemblePrompt } from './context.js';
 import { getSuggestedQueue } from './predictor.js';
@@ -302,6 +302,26 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
   app.get('/api/now', (_req: Request, res: Response) => {
     const queue = opts.db ? getRecentPlays(opts.db, 20) : [];
     res.json({ current: queue[0] ?? null, queue });
+  });
+
+  app.get('/api/history', (req: Request, res: Response) => {
+    const page = Number(req.query.page ?? 1);
+    const pageSize = Number(req.query.pageSize ?? 20);
+    if (!opts.db) return res.json({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 0 });
+    res.json(getPlayHistory(opts.db, page, pageSize));
+  });
+
+  app.post('/api/history/record', (req: Request, res: Response) => {
+    const { songId, name, artist } = req.body;
+    if (!songId) return res.status(400).json({ error: 'songId required' });
+    if (opts.db) {
+      addPlay(opts.db, {
+        song_id: String(songId),
+        song_name: name ?? '',
+        artist: artist ?? '',
+      });
+    }
+    res.json({ ok: true });
   });
 
   app.get('/api/queue', (_req: Request, res: Response) => {
@@ -804,7 +824,6 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     try {
       const item = await opts.executor.getNextFMSong();
       if (!item) return res.status(502).json({ error: 'FM API returned no song' });
-      broadcast('play', { tracks: [item], fm: true });
       res.json(item);
     } catch (err) {
       next(new AppError('CLAUDIO_ERR_NCM_API', (err as Error).message, 502));

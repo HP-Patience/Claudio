@@ -185,20 +185,40 @@ export function updatePlayModeUI() {
 
 export function setPlayMode(mode) {
   state.playMode = mode;
-  if (mode !== 'shuffle') {
-    state._shuffleHistory = [];
-    state._playlistShuffleHistory = [];
-  }
+  if (mode !== 'shuffle') state._shuffleHistory = [];
   localStorage.setItem('claudio-playmode', mode);
   updatePlayModeUI();
   dom.playModeDropdown.style.display = 'none';
 }
 
+function recordPlayback(item) {
+  if (!item.songId) return Promise.resolve();
+  return fetch('/api/history/record', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ songId: item.songId, name: item.name, artist: item.artist }),
+  }).catch((err) => console.warn('[history] record failed', err));
+}
+
+let playRequestToken = 0;
+
+function recordConfirmedPlayback(item, token, expectedUrl) {
+  return audio.play()
+    .then(() => {
+      if (token === playRequestToken && state.currentTrack === item && audio.src === expectedUrl) {
+        return recordPlayback(item);
+      }
+    })
+    .catch(() => {});
+}
+
 export function playTrack(item) {
-  if (!item || !item.url) return;
+  if (!item || !item.url) return Promise.resolve();
+  const token = ++playRequestToken;
+  const audioUrl = resolveAudioUrl(item.url);
   state.currentTrack = item;
-  audio.src = resolveAudioUrl(item.url);
-  audio.play().catch(() => {});
+  audio.src = audioUrl;
+  const recordDone = recordConfirmedPlayback(item, token, audio.src);
   dom.nowPlaying.textContent = `${item.name} - ${item.artist}`;
   dom.onAir.classList.add('active');
   addChatMessage(`🎵 Now playing: ${item.name} — ${item.artist}`, 'system');
@@ -237,6 +257,7 @@ export function playTrack(item) {
   }
 
   updateMediaSession(item);
+  return recordDone;
 }
 
 function updateMediaSession(item) {
@@ -253,11 +274,14 @@ function updateMediaSession(item) {
 }
 
 function replayCurrentTrack() {
-  if (!state.currentTrack || !state.currentTrack.url) return;
+  if (!state.currentTrack || !state.currentTrack.url) return Promise.resolve();
+  const item = state.currentTrack;
+  const token = ++playRequestToken;
+  const audioUrl = audio.src;
   audio.currentTime = 0;
-  audio.play().catch(() => {});
   dom.onAir.classList.add('active');
   dom.playBtn.innerHTML = ICONS.pause;
+  return recordConfirmedPlayback(item, token, audioUrl);
 }
 
 let _fetchingFm = false;
@@ -270,9 +294,9 @@ async function fetchNextFm() {
     if (!res.ok) { state.isFmMode = false; updateModeDisplay(); showModeToast('FM 播放结束'); return; }
     const item = await res.json();
     if (!item || !item.url) { state.isFmMode = false; updateModeDisplay(); showModeToast('FM 播放结束'); return; }
-    state.currentTrack = item;
-    dom.nowPlaying.textContent = `${item.name} - ${item.artist}`;
-    dom.onAir.classList.add('active');
+    playTrack(item);
+    state.isFmMode = true;
+    updateModeDisplay();
   } catch {
     state.isFmMode = false;
     updateModeDisplay();
