@@ -3,9 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { addSkip, getRecentSkips, getPref } from './db.js';
 import { invokeClaude } from './claude.js';
+import { defaultUserCorpusDir } from './runtime.js';
 
 function getMoodRulesPath(db: Database.Database): string {
-  const dir = getPref(db, 'user_corpus_dir') || process.env.USER_CORPUS_DIR || 'user';
+  const dir = getPref(db, 'user_corpus_dir') || defaultUserCorpusDir();
   return path.resolve(dir, 'mood-rules.md');
 }
 

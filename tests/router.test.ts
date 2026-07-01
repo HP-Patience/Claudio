@@ -1,8 +1,11 @@
 import Database from 'better-sqlite3';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createApp } from '../src/router.js';
 import request from 'supertest';
 import express from 'express';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 vi.mock('../src/db.js', () => ({
   initDb: vi.fn(),
@@ -55,6 +58,7 @@ vi.mock('../src/predictor.js', () => ({
 
 vi.mock('../src/adapters/netease.js', () => ({
   getNcmCookie: vi.fn().mockReturnValue('mock-cookie'),
+  setNcmBase: vi.fn(),
   getPlaylistDetail: vi.fn(),
   addTracksToPlaylist: vi.fn(),
   getUserPlaylists: vi.fn().mockResolvedValue([]),
@@ -73,11 +77,14 @@ import { broadcast } from '../src/ws.js';
 
 describe('router', () => {
   let app: ReturnType<typeof createApp>;
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getPref).mockReturnValue(null);
     app = createApp({ db: {} as any });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
   describe('POST /api/chat', () => {
     it('routes simple command locally without calling Claude', async () => {
@@ -122,9 +129,23 @@ describe('router', () => {
       expect(res.status).toBe(200);
       expect(assemblePrompt).toHaveBeenCalled();
       expect(invokeClaude).toHaveBeenCalled();
-      // prompt arg should contain the assembled prompt
       const promptArg = (invokeClaude as any).mock.calls[0][0];
       expect(promptArg).toContain('Assembled Prompt');
+    });
+
+    it('defaults user corpus to CLAUDIO_DATA_DIR user folder', async () => {
+      const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claudio-corpus-'));
+      vi.stubEnv('CLAUDIO_DATA_DIR', dataDir);
+      vi.mocked(getPref).mockReturnValue(null);
+
+      const res = await request(app)
+        .post('/api/chat')
+        .send({ text: '播放爵士乐' });
+
+      expect(res.status).toBe(200);
+      expect(assemblePrompt).toHaveBeenCalledWith(expect.objectContaining({
+        userCorpusDir: path.join(dataDir, 'user'),
+      }));
     });
   });
 
@@ -153,13 +174,21 @@ describe('router', () => {
       expect(res.body.sceneSuggestionsEnabled).toBe(false);
     });
 
-    it('persists scene suggestion toggle state', async () => {
-      const res = await request(app)
+    it('writes config env file inside CLAUDIO_DATA_DIR', async () => {
+      const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claudio-router-'));
+      fs.rmSync(path.resolve('.env'), { force: true });
+      vi.stubEnv('CLAUDIO_DATA_DIR', dataDir);
+      vi.resetModules();
+      const { createApp: createFreshApp } = await import('../src/router.js');
+      const freshApp = createFreshApp({ db: {} as any });
+
+      const res = await request(freshApp)
         .post('/api/config')
-        .send({ sceneSuggestionsEnabled: false });
+        .send({ ncmApi: 'http://127.0.0.1:3999' });
 
       expect(res.status).toBe(200);
-      expect(setPref).toHaveBeenCalledWith(expect.anything(), 'scene_suggestions_enabled', 'false');
+      expect(fs.readFileSync(path.join(dataDir, '.env'), 'utf-8')).toContain('NCM_API=http://127.0.0.1:3999');
+      expect(fs.existsSync(path.resolve('.env'))).toBe(false);
     });
   });
 

@@ -2,16 +2,22 @@
   "name": "claudio",
   "version": "0.0.1",
   "type": "module",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev": "node --env-file=.env --import tsx src/server.ts"
+    "dev": "node --env-file=.env --import tsx src/server.ts",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.electron.json",
+    "dev:desktop": "npm run build && electron .",
+    "dist:win": "npm run build && electron-builder --win nsis"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.6",
     "@types/supertest": "^7.2.0",
     "@types/ws": "^8.18.1",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12",
     "playwright": "^1.60.0",
     "supertest": "^7.2.2",
     "tsx": "^4.22.4",
@@ -22,5 +28,41 @@
     "better-sqlite3": "^12.10.0",
     "express": "^5.2.1",
     "ws": "^8.21.0"
+  },
+  "build": {
+    "appId": "ai.claudio.desktop",
+    "productName": "Claudio",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "frontend/**/*",
+      "prompts/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "api-enhanced",
+        "to": "app/api-enhanced",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*",
+      "api-enhanced/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "frontend/icons/icon-512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    }
   }
 }

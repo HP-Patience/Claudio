@@ -2,6 +2,7 @@ import { assemblePrompt } from './context.js';
 import { invokeClaude } from './claude.js';
 import type Database from 'better-sqlite3';
 import { getMessages, getPref } from './db.js';
+import { defaultUserCorpusDir } from './runtime.js';
 
 export interface SceneInfo {
   scene: string;
@@ -54,7 +55,7 @@ export async function getSuggestedQueue(opts: {
 }): Promise<{ scene: SceneInfo; say: string; play: string[]; reason: string }> {
   const scene = detectScene({ weather: opts.weather, calendar: opts.calendar });
   const history = getMessages(opts.db, 10).reverse();
-  const userCorpusDir = getPref(opts.db, 'user_corpus_dir') ?? process.env.USER_CORPUS_DIR ?? 'user';
+  const userCorpusDir = getPref(opts.db, 'user_corpus_dir') ?? defaultUserCorpusDir();
 
   const basePrompt = assemblePrompt({
     userCorpusDir,

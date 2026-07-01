@@ -11,11 +11,14 @@ import { setFeishuConfig } from './adapters/feishu.js';
 import { setUpnpDevices } from './adapters/upnp.js';
 import { setFishKey } from './tts.js';
 import { startTriggerLoop, getCachedCoords } from './triggers.js';
+import { resolveAppFile, resolveRuntimeFile } from './runtime.js';
 import { getNcmCookie } from './adapters/netease.js';
 import path from 'node:path';
 import fs from 'node:fs';
 
-const DB_PATH = process.env.DB_PATH ?? 'state.db';
+function resolveDbPath(): string {
+  return process.env.DB_PATH ?? resolveRuntimeFile('state.db');
+}
 
 interface StartOptions {
   port?: number;
@@ -25,11 +28,12 @@ export async function start(options: StartOptions = {}) {
   const port = options.port !== undefined ? options.port : (Number(process.env.PORT) || 3005);
 
   // init DB
-  const dbDir = path.dirname(DB_PATH);
+  const dbPath = resolveDbPath();
+  const dbDir = path.dirname(dbPath);
   if (dbDir && dbDir !== '.') {
     fs.mkdirSync(dbDir, { recursive: true });
   }
-  const db = new Database(DB_PATH);
+  const db = new Database(dbPath);
   initDb(db);
 
   // Inject config from DB prefs into adapters (overrides .env defaults)
@@ -62,7 +66,7 @@ export async function start(options: StartOptions = {}) {
   const app = createApp({ db, executor });
 
   // serve frontend static files
-  app.use(express.static(path.resolve('frontend')));
+  app.use(express.static(resolveAppFile('frontend')));
 
   // create HTTP server
   const server = http.createServer(app);

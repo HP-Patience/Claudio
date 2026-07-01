@@ -13,9 +13,9 @@ export const QUALITY_LEVELS = {
 
 export type QualityLevel = keyof typeof QUALITY_LEVELS;
 
-let DEFAULT_BR = QUALITY_LEVELS.exhigh; // default to 320k
+let DEFAULT_BR: (typeof QUALITY_LEVELS)[QualityLevel] = QUALITY_LEVELS.exhigh; // default to 320k
 
-export function setDefaultBr(br: number): void {
+export function setDefaultBr(br: (typeof QUALITY_LEVELS)[QualityLevel]): void {
   DEFAULT_BR = br;
 }
 
