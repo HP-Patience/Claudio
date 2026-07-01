@@ -18,12 +18,13 @@ import { setFeishuConfig } from './adapters/feishu.js';
 import { setUpnpDevices } from './adapters/upnp.js';
 import { setFishKey } from './tts.js';
 import { AppError, errorMiddleware } from './errors.js';
+import { defaultUserCorpusDir, resolveAppFile, resolveRuntimeFile } from './runtime.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
 import http from 'node:http';
 
-const ENV_PATH = path.resolve('.env');
+const ENV_PATH = path.resolve(resolveRuntimeFile('.env'));
 
 const ENV_KEY_MAP: Record<string, string> = {
   ncmApi: 'NCM_API',
@@ -57,6 +58,7 @@ function syncEnvFile(updates: Record<string, string | undefined>): void {
     }
   }
 
+  fs.mkdirSync(path.dirname(ENV_PATH), { recursive: true });
   fs.writeFileSync(ENV_PATH, lines.join('\n') + '\n', 'utf-8');
 }
 
@@ -98,7 +100,7 @@ function classifyIntent(text: string): 'simple' | 'claude' {
 
 function loadDJPrompt(): string {
   try {
-    return fs.readFileSync(path.resolve('prompts/dj-persona.md'), 'utf-8');
+    return fs.readFileSync(resolveAppFile('prompts/dj-persona.md'), 'utf-8');
   } catch {
     return '';
   }
@@ -155,7 +157,7 @@ export function createApp(opts: RouterOptions = {}): Express {
 
     const history = opts.db ? getMessages(opts.db, 10).reverse() : [];
     const basePrompt = assemblePrompt({
-      userCorpusDir: (opts.db ? getPref(opts.db, 'user_corpus_dir') : null) ?? process.env.USER_CORPUS_DIR ?? 'user',
+      userCorpusDir: (opts.db ? getPref(opts.db, 'user_corpus_dir') : null) ?? defaultUserCorpusDir(),
       weather,
       calendar,
       time: new Date().toLocaleString('zh-CN'),
@@ -616,7 +618,7 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
       try {
         const info = await getLoginStatus();
         vipType = info.vipType;
-        nickname = info.nickname;
+        nickname = info.nickname ?? '';
       } catch { console.warn('[ncm] login status fetch failed'); }
     }
     res.json({ loggedIn, vipType, nickname });
@@ -710,9 +712,9 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
           clearTimeout(timer);
           return r.ok ? { online: true } : { online: false, reason: `HTTP ${r.status}` };
         })(),
-        getLoginStatus().catch(() => ({ online: false, vipType: 0 })),
+        getLoginStatus().catch(() => ({ online: false, vipType: 0, nickname: '' })),
       ]);
-      res.json({ ...status, vipType: loginInfo.vipType, nickname: loginInfo.nickname });
+      res.json({ ...status, vipType: loginInfo.vipType, nickname: loginInfo.nickname ?? '' });
     } catch {
       console.warn('[ncm] status check failed');
       res.json({ online: false, reason: 'unreachable', vipType: 0 });
@@ -920,19 +922,20 @@ Only use play_mode when user explicitly asks for these features. Otherwise omit 
     }
 
     const mod = targetUrl.protocol === 'https:' ? https : http;
+    const headers: http.OutgoingHttpHeaders = {
+      'Referer': 'https://music.163.com',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    };
     const options: http.RequestOptions = {
       hostname: targetUrl.hostname,
       port: targetUrl.port || undefined,
       path: targetUrl.pathname + targetUrl.search,
       method: 'GET',
-      headers: {
-        'Referer': 'https://music.163.com',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
+      headers,
     };
 
     if (req.headers.range) {
-      options.headers!['Range'] = req.headers.range as string;
+      headers.Range = req.headers.range as string;
     }
 
     const proxyReq = mod.request(options, (proxyRes) => {
