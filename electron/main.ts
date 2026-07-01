@@ -1,12 +1,21 @@
 import { app, BrowserWindow, Menu, Tray } from 'electron';
+import type http from 'node:http';
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { start } from '../dist/server.js';
 import { findAvailablePort } from './ports.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const require_ = createRequire(import.meta.url);
+
+// Import from dist/server.js using runtime path (compiled to dist-electron/electron/,
+// so ../../ reaches project root)
+const { start } = require_('../../dist/server.js') as {
+  start: (opts?: { port?: number }) => Promise<{ server: http.Server; shutdown: () => Promise<void> }>;
+};
 
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -15,7 +24,7 @@ let shutdownServer: (() => Promise<void>) | null = null;
 let quitting = false;
 
 function resourceRoot(): string {
-  return app.isPackaged ? path.join(process.resourcesPath, 'app') : path.resolve(__dirname, '..');
+  return app.isPackaged ? path.join(process.resourcesPath, 'app') : path.resolve(__dirname, '../..');
 }
 
 function dataDir(): string {
